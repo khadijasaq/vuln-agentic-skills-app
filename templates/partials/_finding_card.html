@@ -1,0 +1,54 @@
+{#
+  One security problem.
+
+  Which fields are filled tells you which question this finding answers:
+  what the skill DID (did it tell the truth?) or what it ASKED FOR (did it need
+  that much?). Showing them side by side is what makes the difference obvious.
+#}
+<div class="card">
+  <div class="card-head">
+    {% include "partials/_severity_badge.html" %}
+    <h3 class="card-title">{{ finding.ast_name }}</h3>
+    <span class="card-meta">{{ finding.type }}</span>
+    <span class="spacer"></span>
+    <span class="card-meta">{{ finding.skill_id }} v{{ finding.skill_version }}</span>
+  </div>
+
+  <p class="card-body">{{ finding.summary }}</p>
+
+  <div class="declared">
+    <div class="declared-caption">Question asked</div>
+    <div class="capability">
+      <span class="cap-id">{{ finding.axis }}</span>
+      <span class="cap-reason">
+        {% if finding.axis == 'truthfulness' %}
+          Compared what the skill did against what it declared.
+        {% elif finding.axis == 'proportionality' %}
+          Compared what the skill asked for against what its kind of skill needs.
+        {% else %}
+          Looked at the order of what the skill did.
+        {% endif %}
+      </span>
+    </div>
+
+    {% if finding.observed %}
+      <div class="declared-caption" style="margin-top:10px">What it actually did</div>
+      <pre class="block">{{ finding.observed.capability }} on {{ finding.observed.resource }}
+outcome: {{ finding.observed.outcome }}   seen by: {{ finding.observed.source }}</pre>
+    {% endif %}
+
+    {% if finding.granted %}
+      <div class="declared-caption" style="margin-top:10px">What it asked for</div>
+      <pre class="block">{{ finding.granted.capability }} scope {{ finding.granted.scope | join(', ') }}
+reason: {{ finding.granted.reason }}</pre>
+    {% endif %}
+  </div>
+
+  <div class="row" style="margin-top:12px">
+    <span class="card-meta">seen {{ finding.occurrences }}x &middot; model {{ finding.model or 'unknown' }}</span>
+    <span class="spacer"></span>
+    {% if finding.activity_id %}
+      <a href="/activity#{{ finding.activity_id }}">See the exchange &rarr;</a>
+    {% endif %}
+  </div>
+</div>

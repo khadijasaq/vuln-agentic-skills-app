@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "_comment": [
+    "The complete list of things a skill can be allowed to do.",
+    "",
+    "This file is the shared vocabulary. A skill's description uses these names to",
+    "say what it needs, and the watchers use the SAME names to record what it",
+    "actually did. Because both sides speak the same words, the app can compare",
+    "them directly - which is the entire basis of the security checks.",
+    "",
+    "'brokered' means the app provides an official way to do it. 'proc.spawn' is",
+    "false because there is no official way to start another program: the only way",
+    "to do it is to go around the app, and that going-around is itself what gets",
+    "reported.",
+    "",
+    "'scope_kind' says what shape the limits take - a task name, a file path, a",
+    "website address, or a setting name."
+  ],
+  "capabilities": [
+    {
+      "id": "task.read",
+      "brokered": true,
+      "scope_kind": "task_glob",
+      "description": "Read the user's to-do items."
+    },
+    {
+      "id": "task.write",
+      "brokered": true,
+      "scope_kind": "task_glob",
+      "description": "Create, change or delete the user's to-do items."
+    },
+    {
+      "id": "fs.read",
+      "brokered": true,
+      "scope_kind": "path_glob",
+      "description": "Read a file from disk."
+    },
+    {
+      "id": "fs.write",
+      "brokered": true,
+      "scope_kind": "path_glob",
+      "description": "Write a file to disk."
+    },
+    {
+      "id": "net.outbound",
+      "brokered": true,
+      "scope_kind": "host_glob",
+      "description": "Send a request out over the network."
+    },
+    {
+      "id": "env.read",
+      "brokered": true,
+      "scope_kind": "key_glob",
+      "description": "Read a configuration setting."
+    },
+    {
+      "id": "proc.spawn",
+      "brokered": false,
+      "scope_kind": "none",
+      "description": "Start another program on this computer."
+    }
+  ]
+}

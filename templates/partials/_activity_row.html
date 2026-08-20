@@ -1,0 +1,48 @@
+{# One exchange. Click it to open the full detail underneath. #}
+<div class="activity-row {% if entry.vulnerability_fired %}flagged{% endif %}" id="{{ entry.id }}">
+  <div class="activity-head">
+    <span class="activity-when">{{ entry.ts[11:19] }}</span>
+    <span class="activity-what">
+      {{ entry.user_message }}
+      {% if entry.skill_invoked %}
+        <span class="skill-chip">{{ entry.skill_invoked.skill_id }}</span>
+      {% endif %}
+    </span>
+    {% if entry.vulnerability_fired %}
+      <span class="badge badge-high">reported</span>
+    {% endif %}
+  </div>
+
+  <div class="activity-detail">
+    <div class="detail-label">Reply</div>
+    <div class="muted">{{ entry.reply }}</div>
+
+    {% if entry.skill_invoked %}
+      <div class="detail-label">Skill</div>
+      <pre class="block">{{ entry.skill_invoked.skill_id }} v{{ entry.skill_invoked.skill_version }}
+values supplied: {{ entry.skill_invoked.params }}
+outcome: {{ entry.skill_invoked.outcome }}   took: {{ entry.skill_invoked.duration_ms }}ms</pre>
+    {% endif %}
+
+    {% if entry.observations %}
+      <div class="detail-label">What the skill touched, in order</div>
+      <table class="observations">
+        <tr><th>#</th><th>Ability</th><th>On what</th><th>Outcome</th><th>Seen by</th></tr>
+        {% for observation in entry.observations %}
+          <tr>
+            <td>{{ observation.seq }}</td>
+            <td>{{ observation.capability }}</td>
+            <td>{{ observation.resource }}</td>
+            <td class="outcome-{{ observation.outcome }}">
+              {{ observation.outcome }}{% if observation.refusal_reason %} ({{ observation.refusal_reason }}){% endif %}
+            </td>
+            <td>{{ observation.source }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+
+    <div class="detail-label">Model</div>
+    <div class="mono dim">{{ entry.model or 'unknown' }}</div>
+  </div>
+</div>

@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "_comment": [
+    "How much power each KIND of skill reasonably needs.",
+    "",
+    "This is the yardstick for the question 'did this skill need that much access?'",
+    "A skill declares which category it belongs to, and this file says what a skill",
+    "of that kind should reasonably be able to do.",
+    "",
+    "Note this is a completely different question from 'did the skill tell the",
+    "truth?'. A skill can be perfectly honest about wanting sweeping access and",
+    "still be over-powered for its job. That is why the two checks read different",
+    "inputs and can never collapse into one another.",
+    "",
+    "'allowed'   - the capabilities a skill of this kind may reasonably ask for.",
+    "'max_scope' - how wide those capabilities may reasonably reach. A capability",
+    "              not listed here may reach anywhere."
+  ],
+  "categories": {
+    "reporting": {
+      "allowed": ["task.read"],
+      "max_scope": {
+        "task.read": ["*"]
+      }
+    },
+    "formatting": {
+      "allowed": ["task.read", "task.write"],
+      "max_scope": {
+        "fs.read": ["data/skills/**"]
+      }
+    },
+    "reminder": {
+      "allowed": ["task.read", "task.write"],
+      "max_scope": {}
+    },
+    "integration": {
+      "allowed": ["task.read", "net.outbound"],
+      "max_scope": {
+        "net.outbound": ["127.0.0.1"]
+      }
+    }
+  }
+}

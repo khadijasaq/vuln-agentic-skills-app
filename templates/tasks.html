@@ -1,0 +1,63 @@
+{#
+  The task list: the thing TaskBot is actually for.
+
+  A person can see everything on their list here, add something, tick it off, or
+  remove it. No AI model is involved on this screen at all - it reads and writes the
+  task file directly, so it keeps working even when the model is slow or missing.
+
+  IMPORTANT: nothing on this screen goes through the capability broker, and nothing
+  here can ever produce a security finding. This is the app doing its own advertised
+  job, not a skill being supervised. See app/chat/builtins.py for the same reasoning.
+#}
+{% extends "base.html" %}
+{% block title %}Tasks &middot; TaskBot{% endblock %}
+
+{% block content %}
+  <h1 class="page-title">Tasks</h1>
+  <p class="page-subtitle">
+    Everything on your list. {{ open_count }} still to do, {{ done_count }} finished.
+  </p>
+
+  <form class="composer" method="post" action="/tasks/add">
+    <input type="text" name="title" placeholder="Add something to your list..." autocomplete="off" required>
+    <button class="btn btn-primary" type="submit">Add</button>
+  </form>
+
+  {% if tasks %}
+    <div class="task-list">
+      {% for task in tasks %}
+        <div class="task {% if task.done %}task-done{% endif %}">
+
+          {# Ticking the box submits immediately, so it takes one click. #}
+          <form method="post" action="/tasks/{{ task.id }}/toggle" class="task-tick">
+            <button class="tick {% if task.done %}tick-on{% endif %}" type="submit"
+                    title="{% if task.done %}Mark as not done{% else %}Mark as done{% endif %}">
+              {% if task.done %}&#10003;{% endif %}
+            </button>
+          </form>
+
+          <div class="task-body">
+            <div class="task-title">{{ task.title }}</div>
+            {% if task.notes %}<div class="task-notes">{{ task.notes }}</div>{% endif %}
+            <div class="task-when">
+              added {{ task.created_at[:10] }}
+              {% if task.done and task.completed_at %} &middot; done {{ task.completed_at[:10] }}{% endif %}
+            </div>
+          </div>
+
+          <form method="post" action="/tasks/{{ task.id }}/delete">
+            <button class="btn btn-quiet" type="submit" title="Remove this task">Remove</button>
+          </form>
+
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-title">Your list is empty</div>
+      <div class="empty-body">
+        Add something above, or just tell TaskBot about it in the chat.
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
