@@ -123,21 +123,11 @@ TAXONOMY: dict[str, FindingType] = {
             "The skill read the user's private information and then sent it "
             "elsewhere in the same run."
         ),
-        # RESERVED, NOT BUILT. This type belongs to a later piece of work. It is
-        # listed now so its meaning and severity are settled, and so the engine can
-        # skip it cleanly rather than having to know about it as a special case.
-        implemented=False,
+        # Built by the AST01 feature. The engine's correlation check looks for a task
+        # read followed by a send of that same data in one run (see engine.py).
+        implemented=True,
     ),
 }
-
-
-def implemented_types() -> list[FindingType]:
-    """
-    The problem types this app actually looks for right now.
-
-    In: nothing. Out: the types with implemented set to true.
-    """
-    return [entry for entry in TAXONOMY.values() if entry.implemented]
 
 
 def get_type(type_id: str) -> FindingType:

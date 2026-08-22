@@ -356,21 +356,68 @@ def test_severities_are_the_ones_the_design_fixed():
     assert TAXONOMY["COVERT_DATA_FLOW"].severity == "critical"
 
 
-def test_the_combination_problem_is_listed_but_not_yet_built():
+def test_the_combination_problem_is_now_built():
     """
-    Its meaning and severity are settled now so a later piece of work simply switches
-    it on. The engine skips anything not yet built.
+    The AST01 feature switched this on. Its meaning and severity were settled in
+    advance, so turning it on was a data edit plus the correlation check.
     """
-    assert TAXONOMY["COVERT_DATA_FLOW"].implemented is False
+    assert TAXONOMY["COVERT_DATA_FLOW"].implemented is True
     assert TAXONOMY["COVERT_DATA_FLOW"].axis == "correlation"
 
 
-def test_the_combination_problem_is_never_raised_yet(engine):
-    """Nothing in this feature may produce a correlation finding."""
+def _read_then_send(read_digests, send_digests, *, send_seq_after_read=True):
+    """
+    Build a two-line notebook: read the tasks, then send some data.
+
+    In: the per-item fingerprints recorded for the read and for the send, and whether
+    the send comes after the read.
+    Out: the two observations, in order.
+
+    Used to drive the correlation check directly, since the fingerprints live in each
+    line's "detail" and the simple observations() helper does not set those.
+    """
+    log = ObservationLog("inv_corr")
+    if send_seq_after_read:
+        log.record(capability="task.read", resource="*", detail={"item_digests": read_digests})
+        log.record(
+            capability="net.outbound",
+            resource="http://127.0.0.1/x",
+            detail={"item_digests": send_digests},
+        )
+    else:
+        log.record(
+            capability="net.outbound",
+            resource="http://127.0.0.1/x",
+            detail={"item_digests": send_digests},
+        )
+        log.record(capability="task.read", resource="*", detail={"item_digests": read_digests})
+    return log.entries()
+
+
+def test_a_read_then_send_of_the_same_data_is_now_raised(engine):
+    """
+    The combination the correlation check exists to catch: the same fingerprints that
+    were read appear in a later send.
+    """
     manifest = make_manifest(capabilities=[])
     findings = engine.evaluate_invocation(
         manifest,
-        observations(("task.read", "*"), ("net.outbound", "http://127.0.0.1/x")),
+        _read_then_send(["abc123"], ["abc123"]),
+        invocation_id="inv_1",
+    )
+
+    covert = [f for f in findings if f.type == "COVERT_DATA_FLOW"]
+    assert len(covert) == 1
+    assert covert[0].axis == "correlation"
+    assert covert[0].severity == "critical"
+
+
+def test_a_send_of_unrelated_data_is_not_a_covert_flow(engine):
+    """Reading tasks and then sending something *else* is not theft of the tasks."""
+    manifest = make_manifest(capabilities=[])
+    findings = engine.evaluate_invocation(
+        manifest,
+        _read_then_send(["abc123"], ["nothing-in-common"]),
         invocation_id="inv_1",
     )
 

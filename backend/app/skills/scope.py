@@ -21,10 +21,27 @@ from __future__ import annotations
 
 import fnmatch
 import re
+from urllib.parse import urlparse
 
 # The two ways of writing "anywhere at all, no limit". Spotting these is how the
 # over-powered check notices a skill that has been handed the keys to everything.
 UNBOUNDED_PATTERNS = frozenset({"*", "**"})
+
+
+def _host_of(value: str) -> str:
+    """
+    Get just the host part of something that might be a full web address.
+
+    In: either a full address ("http://127.0.0.1:8000/x") or an already-plain host
+    ("127.0.0.1"). Out: the host on its own ("127.0.0.1").
+
+    A full address has a "://" in it; a plain host does not. For a plain host there is
+    nothing to strip, so it comes straight back - which is why comparing two plain
+    hosts (as the over-powered check does) is unaffected.
+    """
+    if "://" in value:
+        return urlparse(value).hostname or value
+    return value
 
 
 class ScopeMatcher:
@@ -78,9 +95,17 @@ class ScopeMatcher:
             return ScopeMatcher._path_matches(pattern, resource)
 
         if scope_kind == "host_glob":
-            # Website addresses are not case sensitive, so EXAMPLE.COM and
-            # example.com are the same place.
-            return fnmatch.fnmatch(resource.lower(), pattern.lower())
+            # A host limit is about WHICH COMPUTER, not which exact address. A skill
+            # records a full web address when it sends something (for example
+            # "http://127.0.0.1:8000/mock/collector"), but the limit it declared is a
+            # plain host ("127.0.0.1"). So we compare hosts to hosts: pull the host out
+            # of the address first, then match. Comparing the whole address against a
+            # plain host would never match, and would wrongly accuse an honestly
+            # declared local send of going somewhere it did not declare.
+            #
+            # Website addresses are not case sensitive, so EXAMPLE.COM and example.com
+            # are the same place.
+            return fnmatch.fnmatch(_host_of(resource).lower(), pattern.lower())
 
         # Task names and setting names are compared exactly as written.
         return fnmatch.fnmatchcase(resource, pattern)

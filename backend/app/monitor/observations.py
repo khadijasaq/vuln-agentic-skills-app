@@ -84,6 +84,63 @@ def size_of(value: Any) -> int:
     return len(json.dumps(value, default=str).encode("utf-8"))
 
 
+def payload_item_digests(value: Any) -> list[str]:
+    """
+    Make a fingerprint of every individual item inside a piece of outgoing data.
+
+    In: anything that can be written as JSON (usually the body of a network send).
+    Out: one 64-character fingerprint for each item found inside it.
+
+    WHY THIS EXISTS. When the task list is read, we fingerprint each task on its own
+    (see TaskBroker.list). To later prove those very tasks were the thing sent out, we
+    need the same per-item fingerprints on the send side too - and they must survive a
+    skill that hides the tasks inside a bigger message. A thief rarely posts the list
+    exactly as read; they wrap it ("here is my backup: [ ...tasks... ]"), send only
+    some of it, or shuffle the order. A single fingerprint of the whole message would
+    not match in any of those cases.
+
+    So instead of fingerprinting the whole message, we look *inside* it: we walk
+    through the data and take a fingerprint of every item that appears in any list,
+    however deeply it is buried. A task wrapped inside an envelope still produces the
+    exact same fingerprint it had when it was read, because we fingerprint the task
+    itself, not the envelope around it. It is like checking every item in a parcel
+    against a list of stolen goods, rather than only weighing the parcel as a whole.
+
+    The fingerprints use the very same recipe as digest_of, so a task read and a task
+    sent line up to the identical fingerprint. A skill that transforms an item beyond
+    recognition first - encrypting or re-encoding it - will not match, and that limit
+    is deliberate and stated in the spec (Spec S-2): a fingerprint proves data moved,
+    it cannot prove data moved under disguise.
+    """
+    digests: list[str] = []
+    _collect_item_digests(value, digests)
+    return digests
+
+
+def _collect_item_digests(value: Any, digests: list[str]) -> None:
+    """
+    Walk one piece of data and collect a fingerprint of every list item inside it.
+
+    In: the data to look through, and the list to add fingerprints to.
+    Out: nothing (it fills the list it was given).
+
+    For every list we meet, each element gets its own fingerprint - that is the item
+    a covert-flow check compares against. We then keep looking inside that element too,
+    so items hidden in a list nested within another list are still found.
+    """
+    if isinstance(value, list):
+        for element in value:
+            # Fingerprint the whole element (e.g. one task), exactly as it was
+            # fingerprinted when it was read, then keep looking inside it.
+            digests.append(digest_of(element))
+            _collect_item_digests(element, digests)
+    elif isinstance(value, dict):
+        # A dict is an envelope, not an item in its own right - look through its
+        # values so tasks tucked under a key like "items" are still found.
+        for nested in value.values():
+            _collect_item_digests(nested, digests)
+
+
 class ObservationLog:
     """
     The notebook for ONE run of ONE skill.

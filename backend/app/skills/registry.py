@@ -158,16 +158,50 @@ class SkillRegistry:
         self._records = found
         return list(found.values())
 
-    def discover_default(self) -> list[SkillRecord]:
+    def default_roots(self) -> list[tuple[SkillSource, Path]]:
         """
-        Look in the one place skills live today.
+        Every place the app looks for skills.
 
-        In: nothing. Out: every skill found.
+        In: nothing. Out: the (where it came from, folder) pairs to search.
 
-        User-supplied skills are deliberately not included (TDD section 14, Q-1).
+        There are two kinds of place:
+
+          backend/skills/catalogue/    the shared, honest skills that belong to the
+                                       platform itself.
+          vulnerabilities/<name>/skill/  one folder per deliberate weakness, each
+                                       completely separate from the others.
+
+        Keeping each weakness in its own folder means one can be added, examined or
+        removed without touching any other, and none of them can quietly rely on
+        another's code. What they must NOT contain is any part of the shared platform
+        - the watchers, the findings engine and the rest stay in one place, and a
+        weakness plugs into them rather than carrying its own copy.
+
+        User-supplied skills are deliberately still not included (TDD section 14, Q-1).
         """
         settings = get_settings()
-        return self.discover([(SkillSource.CATALOGUE, settings.skills_dir / "catalogue")])
+
+        roots: list[tuple[SkillSource, Path]] = [
+            (SkillSource.CATALOGUE, settings.skills_dir / "catalogue")
+        ]
+
+        # Each weakness folder contributes its own skill folder, if it has one. The
+        # folders are sorted so the search order is identical on every machine.
+        if settings.vulnerabilities_dir.exists():
+            for folder in sorted(settings.vulnerabilities_dir.iterdir()):
+                skill_folder = folder / "skill"
+                if skill_folder.is_dir():
+                    roots.append((SkillSource.CATALOGUE, skill_folder))
+
+        return roots
+
+    def discover_default(self) -> list[SkillRecord]:
+        """
+        Look everywhere skills live and read each one's description.
+
+        In: nothing. Out: every skill found.
+        """
+        return self.discover(self.default_roots())
 
     def _read_one_skill(
         self,

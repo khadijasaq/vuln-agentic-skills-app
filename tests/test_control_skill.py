@@ -247,6 +247,7 @@ def test_the_skill_imports_nothing_dangerous():
 
     source = (
         Path(__file__).resolve().parents[1]
+        / "backend"
         / "skills"
         / "catalogue"
         / "task_summary"

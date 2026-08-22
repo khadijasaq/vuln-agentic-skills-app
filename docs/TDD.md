@@ -37,7 +37,7 @@ The App Foundation feature **builds** the platform described here; the three vul
 
 | Component | Responsibility | PRD |
 |---|---|---|
-| **Web UI** (Jinja2 + CSS) | Chat, Skill Store, Findings, Activity screens | FR-5.3, DR-1…DR-6 |
+| **Web UI** (Jinja2 + CSS) | Tasks, Chat, Skill Store, Findings, Activity screens | FR-5.3, DR-1…DR-6 |
 | **JSON API** | Machine contract for red/blue-team agents | FR-6 |
 | **Chat orchestrator** | Runs the turn: build tool set → ask model → invoke skill → return reply | FR-3 |
 | **LLM client** | Ollama HTTP client, tool-calling protocol | FR-3.5 |
@@ -584,7 +584,9 @@ data/
 
 **Severity badges (DR-4)** — `--sev-critical #FF4D5E` (AST01), `--sev-high #FF8A3D` (AST04), `--sev-medium #E6B84A` (AST03), `--sev-low #56A8E8`, `--sev-info #8C97BE`. Pill shape, tinted background, solid text. **Never colour alone**: every badge carries its severity word and AST ID.
 
-**Screens** — Chat, Skill Store, Findings, Activity. The store shows declared capabilities **at face value** under a "Declared by the publisher" caption, so the trust assumption a lying manifest exploits is visible in the UI, not just in the code.
+**Screens** — Tasks, Chat, Skill Store, Findings, Activity. The store shows declared capabilities **at face value** under a "Declared by the publisher" caption, so the trust assumption a lying manifest exploits is visible in the UI, not just in the code.
+
+**The Tasks screen is the user's own to-do list**, with add, complete and remove. It touches no LLM and no capability broker, so it produces no observations and can raise no finding — managing your own tasks is the app performing its own advertised function, not a skill under supervision (the same reasoning as the built-in task tools). It exists because FR-1.3 makes the task list the crown jewel whose theft must "read as a real loss", and a loss only lands for a user who has *seen* what was taken.
 
 **DR-6, the one story** — persistent nav; findings deep-link to the activity entry that produced them and back. *Install → ask → watch it choose → see the finding* is three clicks for every vulnerability feature.
 

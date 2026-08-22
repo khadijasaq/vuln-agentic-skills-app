@@ -160,7 +160,7 @@ def test_built_ins_are_not_discoverable_as_skills(tmp_settings, repo_root):
     A built-in must never show up in the skill store. If it did, someone could
     "uninstall" the app's own ability to manage tasks.
     """
-    skills_folder = repo_root / "skills" / "catalogue"
+    skills_folder = repo_root / "backend" / "skills" / "catalogue"
     if not skills_folder.exists():
         pytest.skip("No skills folder yet at this stage of the build.")
 

@@ -4,12 +4,12 @@
 |---|---|
 | **Feature** | App Foundation — the platform every other feature is built on |
 | **Derives from** | `docs/PRD.md` (PRD v1.0) + `docs/TDD.md` (system-wide technical design) |
-| **Status** | Spec, awaiting approval. No build plan, no application code. |
+| **Status** | **Implemented.** Built to this spec on 2026-08-21; 411 tests passing. Two decisions were added during the build — **S-36** (model timeout) and **S-37** (Tasks screen) — both recorded in §18. |
 | **Siblings** | `ast04-insecure-metadata` · `ast01-malicious-skills` · `ast03-over-privileged` |
 
 **Reference rule.** Shared architecture is **not restated here** — it is cited as `TDD §n`. This document specifies only what the App Foundation feature builds. If a mechanism is shared by more than one feature it lives in the TDD; this spec pins it at implementation level because this feature is the one that implements it.
 
-**Conventions.** Details settled at spec level are numbered **S-1 … S-35** (§18). Type signatures are interface specification, not implementation; no function bodies appear.
+**Conventions.** Details settled at spec level are numbered **S-1 … S-37** (§18). Type signatures are interface specification, not implementation; no function bodies appear.
 
 ---
 
@@ -17,7 +17,7 @@
 
 ### 1.1 In scope
 
-The platform described in `TDD §1`: to-do assistant · LLM dispatch · skill store · capability broker and audit-hook monitor · findings engine · activity log · JSON API · storage · the four screens · the **control skill**.
+The platform described in `TDD §1`: to-do assistant · LLM dispatch · skill store · capability broker and audit-hook monitor · findings engine · activity log · JSON API · storage · the five screens (Tasks, Chat, Store, Findings, Activity) · the **control skill**.
 
 ### 1.2 Out of scope
 
@@ -287,7 +287,7 @@ class OllamaClient:
     def chat(self, messages: list[dict], tools: list[dict] | None) -> ChatResponse: ...
 ```
 
-**S-16 — Timeouts and no retries.** `connect=5s`, `read=120s`. A retry would re-run a turn whose skill invocation may already have produced observations and findings, corrupting the evidence chain.
+**S-16 — Timeouts and no retries.** `connect=5s`, `read=300s` (widened by **S-36**), `keep_alive=30m`. A retry would re-run a turn whose skill invocation may already have produced observations and findings, corrupting the evidence chain — so there are none.
 
 **S-17 — Tool-calling capability is verified, not assumed.** `health()` reports whether the configured model is present. A tool-call protocol violation raises `OllamaUnavailable(reason="protocol")` naming the model — the operator learns the model lacks tool support rather than watching skills silently never fire.
 
@@ -804,6 +804,10 @@ Clears `findings.json`, `activity.json`, `markers/`, `collector/inbox/`; clears 
 
 | Route | Template | Content |
 |---|---|---|
+| `GET /tasks` | `tasks.html` | The to-do list (**S-37**) |
+| `POST /tasks/add` | → redirect `/tasks` | Add an item |
+| `POST /tasks/{id}/toggle` | → redirect `/tasks` | Mark done / undo |
+| `POST /tasks/{id}/delete` | → redirect `/tasks` | Remove an item |
 | `GET /` | `chat.html` | Chat (default screen) |
 | `POST /chat` | → redirect `/` | Form post; error banner on `OllamaUnavailable` |
 | `GET /store` | `store.html` | Skill store |
@@ -812,6 +816,8 @@ Clears `findings.json`, `activity.json`, `markers/`, `collector/inbox/`; clears 
 | `GET /activity` | `activity.html` | Activity log |
 
 Shared: `base.html` (nav, footer badge); partials `_skill_card.html`, `_finding_card.html`, `_activity_row.html`, `_severity_badge.html`, `_capability_list.html`.
+
+**The task routes never touch the capability broker.** They read and write storage directly, exactly as the built-in tools do (build plan O-1), so they produce **no observations and can raise no finding**. Managing your own tasks is the app performing its own advertised function, not a skill under supervision. Asserted behaviourally and by source inspection in `tests/test_tasks_screen.py`.
 
 ### 12.2 Static files — **exact set**
 
@@ -830,6 +836,7 @@ static/js/app.js            chat submit + activity row expand — no framework, 
 
 | Screen | Content in this feature |
 |---|---|
+| **Tasks** | The to-do list itself (**S-37**). Add box; one-click tick to complete or un-complete; quiet Remove. Unfinished first, oldest first within each group. Nav shows the outstanding count. **Works with no model at all** — no LLM is involved on this screen |
 | **Chat** | Message list; a turn that ran a skill shows an inline chip naming it, linking to its activity entry. Error banner on `llm_unavailable` with the exact `ollama pull` command |
 | **Store** | One card per skill: name, version, author, description, and **declared capabilities in mono, at face value** (FR-2.1) under the caption *"Declared by the publisher"* — the trust assumption later features exploit is visible in the UI, not just the code. Install/Uninstall action; invalid skills render disabled with their errors |
 | **Findings** | Severity-badged cards, newest first; declared vs observed in mono, AST id/name, occurrences, link to the activity entry. **Empty in this feature** — empty state reads *"No findings. The installed skills have behaved exactly as declared."* |
@@ -863,8 +870,9 @@ static/js/app.js            chat submit + activity row expand — no framework, 
 app/**                        all modules in TDD §10
 policy/capability_vocabulary.json   policy/capability_baselines.json
 skills/catalogue/task_summary/{manifest.json, skill.py}
-templates/{base,chat,store,findings,activity}.html   templates/partials/*.html
+templates/{base,tasks,chat,store,findings,activity}.html   templates/partials/*.html
 static/css/{tokens.css,app.css}  static/fonts/raleway.woff2  static/js/app.js
+scripts/extract_design_tokens.py    one-off build helper (build plan P-3), not app code
 data/.gitkeep
 tests/
 ```
@@ -876,28 +884,33 @@ No `skills/user/`, no `data/uploads/` (`TDD §14 Q-1`). Later features add only 
 
 PRD SC-1 and SC-2 depend on the vulnerable skills and are **out of scope for this feature**.
 
-| # | Criterion | Method | Traces |
-|---|---|---|---|
-| **A-1** | Clean checkout runs with one command; `/` loads; `/api/health` returns `status:"ok"` | Manual | SC-6, G6 |
-| **A-2** | With **zero** skills installed, chat works and the assistant adds and lists tasks | Manual + API | FR-1.1, FR-1.4 |
-| **A-3** | Control skill installs and is chosen by the model for ≥4 of 5 varied natural summary requests | Manual, live model | FR-2.2, FR-3.1 |
-| **A-4** | **Control skill yields zero findings across ≥20 invocations** | Automated, stubbed LLM | **SC-3, G5, I-12** |
-| **A-5** | Re-entrancy suppression holds — `ctx.tasks.list()` yields exactly one `task.read` observation and **no** `fs.read` | Unit | §7.5 r2, I-4 |
-| **A-6** | Stub LLM returning plain text runs **no** skill for any input, including messages quoting the manifest verbatim | Automated | **FR-3.4, I-1** |
-| **A-6a** | Static scan: no comparison against `user_message` under `app/chat/` or `app/skills/` | Automated | FR-3.4 g3 |
-| **A-6b** | Rendered system prompt contains no skill id or name | Automated | **S-23** |
-| **A-7** | With nothing installed, `tools` is empty and no skill is reachable by any prompt | Automated | SC-4, NG4, I-8 |
-| **A-8** | Broker refuses **and records**: non-local host; path outside roots; `../` escape; symlink escape; state-file overwrite; non-`TASKBOT_*` env key | Unit | FR-7.2, FR-7.3, S-27, S-28 |
-| **A-9** | On synthetic manifests: a lying-but-modest manifest yields **only** AST04; an honest-but-broad manifest yields **only** AST03 | Unit, fabricated manifests — **no vulnerable skill shipped** | PRD §7.3 risk, I-7 |
-| **A-10** | Every endpoint in §11 matches its shape and carries `schema_version`; **no upload endpoint exists** | Contract tests | FR-6.3, Q-1 |
-| **A-11** | Non-loopback `TASKBOT_HOST` aborts startup; `rm -rf data/` fully resets | Manual | S-2, FR-7.5 |
-| **A-12** | Ollama down ⇒ `503` + remedy; Store/Findings/Activity still serve | Manual | D-13 |
-| **A-13** | A reviewer follows install → ask → activity unaided | Walkthrough | SC-7, DR-6 |
-| **A-14** | `POST /api/reset` clears findings/markers/activity/collector, re-seeds tasks, **preserves installed state**, changes no skill behaviour | Automated + manual | Q-4, NG3, I-9 |
-| **A-15** | Import-lint: `TDD §10` boundary rules hold; `SkillHost.invoke` referenced only in `orchestrator.py` | Automated | I-1, I-2 |
-| **A-16** | `static/css/app.css` contains no literal hex colour | Automated grep | S-33, DR-1 |
-| **A-17** | Every finding and activity entry carries the resolved `model` | Automated | Q-5 |
-| **A-18** | Observation log order is preserved; `task.read` observations carry `sha256` and `item_digests` | Unit | I-5, S-8, §16-B |
+**Outcome column added after the build.** ✅ passing · ⚠️ not yet confirmed.
+
+| # | Criterion | Method | Traces | Outcome |
+|---|---|---|---|---|
+| **A-1** | Clean checkout runs with one command; `/` loads; `/api/health` returns `status:"ok"` | Manual | SC-6, G6 | ✅ |
+| **A-2** | With **zero** skills installed, chat works and the assistant adds and lists tasks | Manual + API | FR-1.1, FR-1.4 | ✅ |
+| **A-3** | Control skill installs and is chosen by the model for ≥4 of 5 varied natural summary requests | Manual, live model | FR-2.2, FR-3.1 | ⚠️ **3/5** — see `manual-checks.md`; two misses were cold-start timeouts, since addressed by S-36. Needs re-running |
+| **A-4** | **Control skill yields zero findings across ≥20 invocations** | Automated, stubbed LLM | **SC-3, G5, I-12** | ✅ |
+| **A-5** | Re-entrancy suppression holds — `ctx.tasks.list()` yields exactly one `task.read` observation and **no** `fs.read` | Unit | §7.5 r2, I-4 | ✅ |
+| **A-6** | Stub LLM returning plain text runs **no** skill for any input, including messages quoting the manifest verbatim | Automated | **FR-3.4, I-1** | ✅ 10 prompts |
+| **A-6a** | Static scan: no comparison against `user_message` under `app/chat/` or `app/skills/` | Automated | FR-3.4 g3 | ✅ |
+| **A-6b** | Rendered system prompt contains no skill id or name | Automated | **S-23** | ✅ |
+| **A-7** | With nothing installed, `tools` contains **exactly the two built-in task tools and no skill**; no skill executes for any prompt, and no observation or finding is produced *(wording amended by build plan O-1)* | Automated | SC-4, NG4, I-8 | ✅ |
+| **A-8** | Broker refuses **and records**: non-local host; path outside roots; `../` escape; symlink escape; state-file overwrite; non-`TASKBOT_*` env key | Unit | FR-7.2, FR-7.3, S-27, S-28 | ✅ |
+| **A-9** | On synthetic manifests: a lying-but-modest manifest yields **only** AST04; an honest-but-broad manifest yields **only** AST03 | Unit, fabricated manifests — **no vulnerable skill shipped** | PRD §7.3 risk, I-7 | ✅ |
+| **A-10** | Every endpoint in §11 matches its shape and carries `schema_version`; **no upload endpoint exists** | Contract tests | FR-6.3, Q-1 | ✅ |
+| **A-11** | Non-loopback `TASKBOT_HOST` aborts startup; `rm -rf data/` fully resets | Manual | S-2, FR-7.5 | ✅ |
+| **A-12** | Ollama down ⇒ `503` + remedy; Store/Findings/Activity still serve | Manual | D-13 | ✅ |
+| **A-13** | A reviewer follows install → ask → activity unaided | Walkthrough | SC-7, DR-6 | ✅ |
+| **A-14** | `POST /api/reset` clears findings/markers/activity/collector, re-seeds tasks, **preserves installed state**, changes no skill behaviour | Automated + manual | Q-4, NG3, I-9 | ✅ |
+| **A-15** | Import-lint: `TDD §10` boundary rules hold; `SkillHost.invoke` referenced only in `orchestrator.py` | Automated | I-1, I-2 | ✅ |
+| **A-16** | `static/css/app.css` contains no literal hex colour | Automated grep | S-33, DR-1 | ✅ |
+| **A-17** | Every finding and activity entry carries the resolved `model` | Automated | Q-5 | ✅ |
+| **A-18** | Observation log order is preserved; `task.read` observations carry `sha256` and `item_digests` | Unit | I-5, S-8, §16-B | ✅ |
+
+| **A-19** | Tasks screen adds, completes, un-completes and removes; unfinished first | Automated | FR-1.1, **S-37** | ✅ |
+| **A-20** | Managing tasks through the UI records **no observation** and raises **no finding**; the screen works with no model | Automated + source scan | NG4, **S-37** | ✅ |
 
 A-9 closes the PRD §12 blur risk *before* the AST04 and AST03 features exist to expose it. A-18 proves the correlation substrate works before `ast01-malicious-skills` depends on it.
 
@@ -983,6 +996,8 @@ Nothing above is built beyond what this feature needs. Seams C and D exist **onl
 | S-33 | `app.css` has no literal hex | Keeps `TDD §9` "token source only" honest and greppable |
 | S-34 | Raleway self-hosted | Renders with no network at all |
 | S-35 | A trailing `/**` also matches the bare prefix, so `data/**` covers `data` itself as well as everything under it | Standard gitignore-style glob behaviour, and what an author plainly means by `data/**` |
+| S-36 | Model read timeout **300s** (was 120s), and `keep_alive: 30m` sent with every request | Measured on CPU-only inference: an 8B model must load ~5 GB before its first word, and every turn costs **two** model calls. 120s reported a healthy model as broken. `keep_alive` stops Ollama unloading between messages, so only the first message pays the load cost |
+| S-37 | A **Tasks screen** (`/tasks`) with add, complete/undo and remove, reached from the main nav | A to-do app whose to-dos are invisible fails SC-8 ("reads as a believable product"), and FR-1.3 calls the task list the crown jewel whose theft must "read as a real loss" — which requires the user to have seen it. Routes bypass the broker and raise no findings, exactly as the built-in tools do |
 
 ---
 

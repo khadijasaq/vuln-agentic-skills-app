@@ -132,6 +132,13 @@ class Finding(BaseModel):
             resource = self.observed.get("resource")
         elif self.granted:
             capability = self.granted.get("capability")
+        elif self.correlation:
+            # A combination problem has no single capability or resource - it is a
+            # pair of lines (a read and a send). We identify it by that pair, so the
+            # same read-then-send seen again counts as a repeat, while a genuinely
+            # different pair stays its own finding.
+            seqs = tuple(self.correlation.get("observation_seqs") or [])
+            return (self.skill_id, self.skill_version, self.type, None, seqs)
         return (self.skill_id, self.skill_version, self.type, capability, resource)
 
 

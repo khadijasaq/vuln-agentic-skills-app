@@ -40,7 +40,12 @@ import httpx
 
 from app.config import get_settings
 from app.monitor.audit_hook import broker_frame
-from app.monitor.observations import ObservationLog, digest_of, size_of
+from app.monitor.observations import (
+    ObservationLog,
+    digest_of,
+    payload_item_digests,
+    size_of,
+)
 from app.storage import store
 
 logger = logging.getLogger("taskbot.broker")
@@ -368,6 +373,13 @@ class NetBroker(_BaseBroker):
         if payload is not None:
             detail["bytes"] = size_of(payload)
             detail["sha256"] = digest_of(payload)
+            # Fingerprint each item inside the data being sent, not just the whole
+            # message. This is what lets a later check prove that the exact tasks that
+            # were read are the ones going out - even if the skill wrapped them in an
+            # envelope, sent only some, or shuffled them (Spec S-1). It is like
+            # comparing fingerprints to see whether the same tasks that were read are
+            # the ones that got sent out.
+            detail["item_digests"] = payload_item_digests(payload)
 
         observation = self._record("net.outbound", url, detail)
 

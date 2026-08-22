@@ -319,7 +319,7 @@ def test_the_project_ships_no_vulnerable_skill_yet():
     This piece of work is the foundation only. The three deliberately flawed skills
     belong to separate pieces of work, and none of them exists yet.
     """
-    catalogue = REPO_ROOT / "skills" / "catalogue"
+    catalogue = REPO_ROOT / "backend" / "skills" / "catalogue"
     shipped = sorted(path.name for path in catalogue.iterdir() if path.is_dir())
 
     assert shipped == ["task_summary"]

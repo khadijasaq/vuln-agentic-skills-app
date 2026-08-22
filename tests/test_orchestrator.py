@@ -331,7 +331,7 @@ def test_there_is_no_fallback_reply_anywhere_in_the_code():
     from tests.source_tools import executable_source
 
     code = executable_source(
-        Path(__file__).resolve().parents[1] / "app" / "chat" / "orchestrator.py"
+        Path(__file__).resolve().parents[1] / "backend" / "app" / "chat" / "orchestrator.py"
     )
 
     for phrase in ["fallback_reply", "canned", "default_response", "FALLBACK"]:

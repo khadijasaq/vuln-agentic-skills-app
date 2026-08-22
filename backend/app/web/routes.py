@@ -39,6 +39,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.api.routes import _skill_summary
 from app.chat.orchestrator import ChatOrchestrator
+from app.config import get_settings
 from app.llm.ollama_client import OllamaUnavailable
 from app.skills.registry import SkillInvalid, SkillNotFound, get_registry
 from app.storage import store
@@ -47,8 +48,10 @@ logger = logging.getLogger("taskbot.web")
 
 router = APIRouter()
 
-TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# The pages live in the frontend folder. Where that is comes from the settings, so
+# this file does not have to count its way up the folder tree - which would break the
+# moment anything moved.
+templates = Jinja2Templates(directory=str(get_settings().templates_dir))
 
 # When the AI model is unavailable we remember the problem just long enough to show
 # it on the next page load. It is deliberately not saved anywhere: it describes the

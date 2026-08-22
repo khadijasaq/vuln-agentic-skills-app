@@ -45,8 +45,8 @@ def tmp_settings(tmp_path: pytest.TempPathFactory, monkeypatch) -> config.Settin
     # because tests want to read the genuine capability list and the genuine
     # control skill, not invented ones.
     repo_root = Path(__file__).resolve().parents[1]
-    monkeypatch.setenv("TASKBOT_SKILLS_DIR", str(repo_root / "skills"))
-    monkeypatch.setenv("TASKBOT_POLICY_DIR", str(repo_root / "policy"))
+    monkeypatch.setenv("TASKBOT_SKILLS_DIR", str(repo_root / "backend" / "skills"))
+    monkeypatch.setenv("TASKBOT_POLICY_DIR", str(repo_root / "backend" / "policy"))
 
     config.reset_settings()
     settings = config.load_settings()

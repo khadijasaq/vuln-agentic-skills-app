@@ -229,7 +229,7 @@ def test_the_task_routes_never_touch_the_capability_broker():
     from tests.source_tools import executable_source
 
     code = executable_source(
-        Path(__file__).resolve().parents[1] / "app" / "web" / "routes.py"
+        Path(__file__).resolve().parents[1] / "backend" / "app" / "web" / "routes.py"
     )
 
     assert "SkillContext" not in code

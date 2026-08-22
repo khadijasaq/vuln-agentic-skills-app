@@ -28,7 +28,7 @@ from pathlib import Path
 
 import pytest
 
-APP = Path(__file__).resolve().parents[1] / "app"
+APP = Path(__file__).resolve().parents[1] / "backend" / "app"
 
 
 def python_files_under(folder: Path) -> list[Path]:

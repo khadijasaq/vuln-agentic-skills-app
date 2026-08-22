@@ -39,6 +39,30 @@ class ConfigError(Exception):
 LOOPBACK_ADDRESSES = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
+# Where each part of the project lives, worked out from this file's own location.
+#
+# The repository is split into three top-level areas:
+#
+#   backend/         the Python, plus the policy files and the shared control skill
+#   frontend/        the web pages and their styling, served BY the backend
+#   vulnerabilities/ one isolated folder per deliberate weakness
+#
+# Working these out from this file rather than from wherever the app happens to be
+# started means the app finds its own files regardless of the current directory.
+# Every one can still be overridden by an environment variable.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+BACKEND_DEFAULTS = {
+    # Runtime state stays at the top level: it is the lab's memory, not source code,
+    # and every instruction for resetting the lab says "delete the data folder".
+    "data": _REPO_ROOT / "data",
+    "skills": _REPO_ROOT / "backend" / "skills",
+    "policy": _REPO_ROOT / "backend" / "policy",
+    "vulnerabilities": _REPO_ROOT / "vulnerabilities",
+    "frontend": _REPO_ROOT / "frontend",
+}
+
+
 @dataclass(frozen=True)
 class Settings:
     """
@@ -60,6 +84,15 @@ class Settings:
     data_dir: Path
     skills_dir: Path
     policy_dir: Path
+    vulnerabilities_dir: Path
+
+    # --- the web pages and their styling ---
+    #
+    # The pages a person looks at live in their own top-level folder, separate from
+    # the Python. The backend still serves them - they are not a separate program -
+    # so the app needs to know where they are.
+    templates_dir: Path
+    static_dir: Path
 
     # --- behaviour dials ---
     history_turns: int
@@ -131,9 +164,15 @@ def load_settings() -> Settings:
             f"{', '.join(sorted(LOOPBACK_ADDRESSES))}."
         )
 
-    data_dir = Path(_read_text("TASKBOT_DATA_DIR", "./data")).resolve()
-    skills_dir = Path(_read_text("TASKBOT_SKILLS_DIR", "./skills")).resolve()
-    policy_dir = Path(_read_text("TASKBOT_POLICY_DIR", "./policy")).resolve()
+    data_dir = Path(_read_text("TASKBOT_DATA_DIR", str(BACKEND_DEFAULTS["data"]))).resolve()
+    skills_dir = Path(_read_text("TASKBOT_SKILLS_DIR", str(BACKEND_DEFAULTS["skills"]))).resolve()
+    policy_dir = Path(_read_text("TASKBOT_POLICY_DIR", str(BACKEND_DEFAULTS["policy"]))).resolve()
+    vulnerabilities_dir = Path(
+        _read_text("TASKBOT_VULNERABILITIES_DIR", str(BACKEND_DEFAULTS["vulnerabilities"]))
+    ).resolve()
+    frontend_dir = Path(
+        _read_text("TASKBOT_FRONTEND_DIR", str(BACKEND_DEFAULTS["frontend"]))
+    ).resolve()
 
     return Settings(
         model=_read_text("TASKBOT_MODEL", "llama3.1:8b"),
@@ -143,6 +182,9 @@ def load_settings() -> Settings:
         data_dir=data_dir,
         skills_dir=skills_dir,
         policy_dir=policy_dir,
+        vulnerabilities_dir=vulnerabilities_dir,
+        templates_dir=frontend_dir / "templates",
+        static_dir=frontend_dir / "static",
         history_turns=_read_int("TASKBOT_HISTORY_TURNS", 10),
         unused_grant_window=_read_int("TASKBOT_UNUSED_GRANT_WINDOW", 5),
         # These are all worked out from data_dir so every part of the app agrees on

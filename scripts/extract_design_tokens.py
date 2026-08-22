@@ -31,8 +31,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DESIGN_FILE = REPO_ROOT / "design" / "aegis-design-foundations.html"
-TOKENS_OUTPUT = REPO_ROOT / "static" / "css" / "tokens.css"
-FONT_OUTPUT = REPO_ROOT / "static" / "fonts" / "raleway.woff2"
+# The styling lives with the rest of the frontend, which the backend serves.
+TOKENS_OUTPUT = REPO_ROOT / "frontend" / "static" / "css" / "tokens.css"
+FONT_OUTPUT = REPO_ROOT / "frontend" / "static" / "fonts" / "raleway.woff2"
 
 
 def extract_token_block(html: str) -> str:

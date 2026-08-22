@@ -118,7 +118,7 @@ def test_the_engine_does_not_import_the_ai_model_or_the_conversation():
     """
     from pathlib import Path
 
-    findings_folder = Path(__file__).resolve().parents[1] / "app" / "findings"
+    findings_folder = Path(__file__).resolve().parents[1] / "backend" / "app" / "findings"
     for path in findings_folder.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         assert "app.llm" not in text, f"{path.name} reaches into the AI model layer"

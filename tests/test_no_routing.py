@@ -36,7 +36,7 @@ from app.storage import store
 
 from tests.test_manifest import GOOD_MANIFEST
 
-APP = Path(__file__).resolve().parents[1] / "app"
+APP = Path(__file__).resolve().parents[1] / "backend" / "app"
 
 
 class SilentModel:

@@ -225,7 +225,7 @@ def test_a16_the_stylesheet_writes_no_colour_of_its_own():
     If a colour value were written directly here, the app and the design could drift
     apart silently - so this check makes any drift a visible failure instead.
     """
-    css = (REPO_ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    css = (REPO_ROOT / "frontend" / "static" / "css" / "app.css").read_text(encoding="utf-8")
 
     # Ignore the explanatory comments, which naturally discuss colours.
     without_comments = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
@@ -242,7 +242,7 @@ def test_the_colours_were_copied_from_the_design_reference():
     The token file is generated, not hand-written. Spot-checking a few values against
     the design confirms the copy actually happened.
     """
-    tokens = (REPO_ROOT / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
+    tokens = (REPO_ROOT / "frontend" / "static" / "css" / "tokens.css").read_text(encoding="utf-8")
 
     for expected in ["--canvas:#08080D", "--sev-critical:#FF4D5E", "--p-default:#6B3B85"]:
         assert expected in tokens.replace(" ", "")
@@ -253,12 +253,12 @@ def test_the_typeface_is_served_from_this_machine():
     REQUIREMENT DR-1 and the localhost-only principle. The pages must render with no
     internet connection at all, so nothing is fetched from elsewhere.
     """
-    font = REPO_ROOT / "static" / "fonts" / "raleway.woff2"
+    font = REPO_ROOT / "frontend" / "static" / "fonts" / "raleway.woff2"
 
     assert font.exists()
     assert font.read_bytes()[:4] == b"wOF2"
 
-    css = (REPO_ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    css = (REPO_ROOT / "frontend" / "static" / "css" / "app.css").read_text(encoding="utf-8")
     assert "/static/fonts/raleway.woff2" in css
 
 
@@ -280,7 +280,7 @@ def test_severity_badges_never_rely_on_colour_alone():
     Every badge carries its severity word and its risk identifier, so the meaning
     survives for anyone who cannot distinguish the colours.
     """
-    badge = (REPO_ROOT / "templates" / "partials" / "_severity_badge.html").read_text(
+    badge = (REPO_ROOT / "frontend" / "templates" / "partials" / "_severity_badge.html").read_text(
         encoding="utf-8"
     )
 

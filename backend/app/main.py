@@ -20,7 +20,6 @@ steps 0.4 and 1.9.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Callable
 
 from fastapi import FastAPI
@@ -169,11 +168,13 @@ def create_app() -> FastAPI:
     app.include_router(collector_routes.router, prefix="/mock", tags=["mock"])
     app.include_router(web_routes.router, tags=["web"])
 
-    # The stylesheet, font and small script the web pages use. Everything is served
-    # from this machine - the pages work with no internet connection at all.
-    static_dir = Path(__file__).resolve().parents[1] / "static"
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    # The stylesheet, font and small script the web pages use. These live in the
+    # frontend folder, and the backend serves them - they are not a separate program.
+    # Everything comes from this machine, so the pages work with no internet at all.
+    if settings.static_dir.exists():
+        app.mount(
+            "/static", StaticFiles(directory=str(settings.static_dir)), name="static"
+        )
 
     return app
 

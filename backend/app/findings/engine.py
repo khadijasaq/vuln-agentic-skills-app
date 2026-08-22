@@ -16,9 +16,14 @@ only). That is exactly why the two are separate checks reading separate inputs -
 they were two thresholds on one comparison they would blur together, and telling the
 different kinds of vulnerability apart would become impossible.
 
-A third question - "did it combine two harmless abilities into a harmful one?" -
-belongs to a later piece of work. Its type is already in the catalogue so its
-meaning is settled, and this engine simply skips anything not yet built.
+CORRELATION     "Did it combine two harmless abilities into a harmful one?"
+                Reads ONLY the ordered notebook of what happened - not the
+                declaration and not the category. Reading the task list is fine;
+                sending data locally is fine; reading it and THEN sending it is theft.
+
+That third question is answered independently of the other two, on purpose: a skill
+can be perfectly honest and perfectly modest and still steal by combining abilities,
+so correlation must never be built on top of the truthfulness check (invariant I-7).
 
 THIS FILE IS DELIBERATELY PURE. It takes information in, works out an answer, and
 hands it back. It reads no files, writes nothing, and never asks the AI model
@@ -234,6 +239,100 @@ class FindingsEngine:
                 )
         return findings
 
+    # --- Question 3: did it combine two harmless abilities into a harmful one? ----
+
+    def check_correlation(
+        self,
+        manifest: Manifest,
+        observations: list[Observation],
+        *,
+        invocation_id: str | None = None,
+        activity_id: str | None = None,
+        model: str | None = None,
+    ) -> list[Finding]:
+        """
+        Look for the user's data being read and then sent out in the same run.
+
+        In: the skill's description, everything it did in order, and details for the
+        record. Out: a list of problems found.
+
+        This is the third and last question, and it is unlike the other two: it does
+        not care one bit what the skill declared or what its category allows. Reading
+        the task list is fine. Sending something to a local address is fine. Reading
+        the task list and THEN sending it somewhere is theft - and that is true no
+        matter how honestly the skill described itself. So this method reads ONLY the
+        notebook of what happened; the description is passed in only to stamp on the
+        finished finding, never to decide anything (invariant I-7).
+
+        How it decides: it lines up every "read the tasks" against every "send data
+        out" that happened AFTER it, and compares their fingerprints. It is like
+        comparing fingerprints to see whether the same tasks that were read are the
+        ones that got sent out. A match on even one item is enough, because sending
+        even part of the user's private list is theft.
+
+        Two deliberate details, both load-bearing:
+          - the send must come AFTER the read (a later line number). Sending data and
+            only then reading the tasks is not this problem;
+          - a send that was refused still counts. The fingerprint of what it wanted to
+            send was written down before the app said no, so wanting to steal is caught
+            even when nothing left the machine (invariant I-3).
+        """
+        findings: list[Finding] = []
+
+        reads = [
+            observation
+            for observation in observations
+            if observation.capability == "task.read" and observation.outcome == "ok"
+        ]
+        # Any outcome - a refused send still carries the fingerprint of what it meant
+        # to send, and intent is what this question is about.
+        sends = [
+            observation
+            for observation in observations
+            if observation.capability == "net.outbound"
+        ]
+
+        for sent in sends:
+            sent_items = set(sent.detail.get("item_digests") or [])
+            if not sent_items:
+                # Nothing recognisable from the task list is inside this send (for
+                # example a bare "you have 3 tasks left" summary carries no task
+                # fingerprints), so there is nothing to steal here.
+                continue
+
+            matched: set[str] = set()
+            first_read_seq: int | None = None
+            for read in reads:
+                if read.seq >= sent.seq:
+                    # Only a read that happened BEFORE this send can have been the
+                    # source of what was sent.
+                    continue
+                overlap = set(read.detail.get("item_digests") or []) & sent_items
+                if overlap:
+                    matched |= overlap
+                    # reads are already in the order they happened, so the first one
+                    # we find that matches is the earliest source.
+                    if first_read_seq is None:
+                        first_read_seq = read.seq
+
+            if matched:
+                findings.append(
+                    self._build(
+                        "COVERT_DATA_FLOW",
+                        manifest,
+                        correlation={
+                            "observation_seqs": [first_read_seq, sent.seq],
+                            "matched_items": len(matched),
+                        },
+                        evidence_seq=sent.seq,
+                        invocation_id=invocation_id,
+                        activity_id=activity_id,
+                        model=model,
+                    )
+                )
+
+        return findings
+
     # --- Putting it together ------------------------------------------------------
 
     def evaluate_invocation(
@@ -262,6 +361,15 @@ class FindingsEngine:
             self.check_proportionality(
                 manifest,
                 trigger="invocation",
+                invocation_id=invocation_id,
+                activity_id=activity_id,
+                model=model,
+            )
+        )
+        findings.extend(
+            self.check_correlation(
+                manifest,
+                observations,
                 invocation_id=invocation_id,
                 activity_id=activity_id,
                 model=model,
@@ -301,7 +409,9 @@ class FindingsEngine:
         *,
         observed: Observation | None = None,
         granted: dict[str, Any] | None = None,
+        correlation: dict[str, Any] | None = None,
         declared_scope: list[str] | None = None,
+        evidence_seq: int | None = None,
         trigger: Literal["install", "invocation"] = "invocation",
         invocation_id: str | None = None,
         activity_id: str | None = None,
@@ -314,8 +424,14 @@ class FindingsEngine:
         applies. Out: the finished finding.
 
         Which evidence field is filled tells a reader which question the finding
-        answers - "observed" for truthfulness, "granted" for proportionality - so
-        the different kinds can be told apart without reading the wording.
+        answers - "observed" for truthfulness, "granted" for proportionality,
+        "correlation" for a combination problem - so the different kinds can be told
+        apart without reading the wording.
+
+        For a combination problem there is no single "observed" line, because the
+        problem is a pair of lines - a read and a later send. So "observed" is left
+        empty and "evidence_seq" points at the send, which is the line the evidence
+        marker is written against.
         """
         finding_type: FindingType = TAXONOMY[type_id]
         stamp = now_iso()
@@ -343,10 +459,10 @@ class FindingsEngine:
             },
             observed=observed.model_dump() if observed else None,
             granted=granted,
-            correlation=None,
+            correlation=correlation,
             summary=summary,
             evidence={
-                "observation_seq": observed.seq if observed else None,
+                "observation_seq": observed.seq if observed else evidence_seq,
                 "marker": None,
             },
             first_seen=stamp,

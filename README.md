@@ -55,24 +55,50 @@ ollama serve
 ollama pull llama3.1:8b
 
 uv sync
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+uv run uvicorn --app-dir backend app.main:app --host 127.0.0.1 --port 8000
 ```
 
 Then open <http://127.0.0.1:8000>.
 
 Without a model, the chat screen will tell you exactly what is missing and the command
 that fixes it. It will never invent a reply — a demonstration that appeared to work
-with no model running would be worthless.
+with no model running would be worthless. The **Tasks** screen keeps working either
+way, since no model is involved there.
+
+**On speed.** The first message is slow: an 8B model has to load several gigabytes
+before it produces a word, and every message costs two model calls (one to decide
+whether a skill applies, one to phrase the result). TaskBot asks Ollama to keep the
+model resident for 30 minutes, so only the first message pays that cost. The timeout
+is 300 seconds — generous on purpose, because reporting a healthy-but-slow model as
+broken sends you debugging the wrong thing.
+
+The model must support **native tool calling**. `llama3.1:8b` does. Tested and found
+wanting: `mistral:latest` narrates what it would do without ever calling anything, and
+`qwen2.5-coder:3b` writes the tool call as plain text in its reply. With either of
+those, no skill ever runs and the app looks broken when it is not.
+
+## The screens
+
+| | |
+|---|---|
+| **Tasks** | Your actual to-do list — add, tick off, remove. No AI model involved, so it works even while the model is loading |
+| **Chat** | Talk to the assistant |
+| **Store** | Install skills, seeing exactly what each one claims about itself |
+| **Findings** | Security problems the app noticed |
+| **Activity** | The full record of every exchange |
 
 ## Trying it out
 
-1. Open **Store** and look at *Task Summary*. Note that its permissions are shown
-   under "Declared by the publisher" — that wording is deliberate.
-2. Install it.
-3. Go to **Chat** and ask something ordinary, like *"how am I doing on my tasks?"*
-4. Open **Activity** and expand the row. You will see which skill the model chose and
+1. Open **Tasks**. Eight believable starter items. Add one, tick one off — this is
+   the data the exercise is about, so it is worth actually looking at.
+2. Open **Store** and look at *Task Summary*. Its permissions are shown under
+   "Declared by the publisher" — that wording is deliberate.
+3. Install it.
+4. Go to **Chat** and ask something ordinary, like *"how am I doing on my tasks?"*
+   The first message is slow while the model loads; every one after that is quick.
+5. Open **Activity** and expand the row. You will see which skill the model chose and
    every single thing that skill touched, in order.
-5. Open **Findings**. It is empty — and that is the correct result.
+6. Open **Findings**. It is empty — and that is the correct result.
 
 ## For tools and scripts
 
@@ -145,6 +171,22 @@ sandbox*. A skill that ignores the official channels and reaches for a file dire
 **is detected, but not prevented**. That is acceptable here because every skill in this
 repository is written by us and deliberately confined. It would not be acceptable for
 skills from strangers, which is exactly why uploading your own skill is not supported.
+
+## Layout
+
+```
+backend/          the Python: the app, its policy files, and the shared control skill
+frontend/         the web pages and their styling - served BY the backend
+vulnerabilities/  one isolated folder per deliberate weakness
+tests/            the whole suite, spanning both tiers
+docs/             PRD, technical design, and one folder per feature
+data/             runtime lab state (gitignored) - delete it to start over
+design/           the design reference the styling is extracted from
+```
+
+The backend serves the frontend; they are not two separate programs. The shared
+platform - broker, watchers, findings engine, dispatch, storage - lives in `backend/`
+and is never copied into a vulnerability folder. See `vulnerabilities/README.md`.
 
 ## Documentation
 

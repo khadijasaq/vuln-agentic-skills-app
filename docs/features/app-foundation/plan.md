@@ -4,7 +4,7 @@
 |---|---|
 | **Feature** | App Foundation |
 | **Derives from** | `docs/PRD.md` · `docs/TDD.md` · `docs/features/app-foundation/spec.md` (approved) |
-| **Status** | Plan, awaiting approval. No application code yet. |
+| **Status** | **Complete.** All ten stages built 2026-08-21; 411 tests passing. Deviations and additions are listed in §15 below. |
 | **Scope** | Foundation only. **No vulnerable skills** — `ast04-insecure-metadata`, `ast01-malicious-skills`, `ast03-over-privileged` are separate features. |
 
 **Citation convention.** Every step cites `Spec §n` (this feature's spec), `TDD §n`, and PRD IDs. Acceptance tests `A-1…A-18` are from `Spec §15`. Plan-level implementation notes are numbered **P-1…P-4** (§13); they introduce no product decisions.
@@ -723,3 +723,36 @@ No product decisions. Each is an engineering call made to execute the approved s
 **Plan only — stopping here for approval.**
 
 **O-1 needs your decision before Stage 2 begins.** Stages 0 and 1 are unblocked and can start immediately either way.
+
+---
+
+## 15. What actually happened
+
+Recorded after the build, so the plan stays honest about where reality differed.
+
+### Added during the build
+
+| # | Change | Why |
+|---|---|---|
+| **S-36** | Model read timeout 120s → 300s; `keep_alive: 30m` | Measured: an 8B model on CPU could not answer two calls inside 120s from cold. The app was reporting a healthy model as broken |
+| **S-37** | A **Tasks** screen (`/tasks`) with add, complete/undo, remove | The plan built four screens and none of them showed the user's tasks. A to-do app whose to-dos are invisible fails SC-8, and FR-1.3's "theft must read as a real loss" needs the user to have seen the list |
+| — | `python-multipart` dependency | FastAPI requires it to accept an ordinary HTML form post. S-1 did not anticipate it |
+| — | O-1 resolved: two built-in host tools | Without them A-2 was unsatisfiable — see §0 |
+
+### Defects the tests caught, and what was wrong
+
+| Where | Defect |
+|---|---|
+| `storage/atomic.py` | Temp filename keyed on process id, so concurrent writers in one process collided. Also needed a retry on `os.replace`, which Windows transiently denies while a scanner holds the file |
+| `storage/store.py` | 3-byte random suffix on IDs collided by the birthday paradox at thousands per millisecond. Widened to 6 |
+| `skills/registry.py` | `discover()` overwrote a valid record with a later rejected duplicate; `all()` returned stale install state, so the store showed *Install* for an installed skill |
+| `skills/host.py` | Module loading ran entirely inside the "skill is running" marker, so Python reading the `.py` file was recorded as the skill secretly reading files. Split: reading is app work, executing top-level code is the skill's |
+| `skills/scope.py` | A trailing `/**` did not match its bare prefix (**S-35**) |
+
+Every one of these was found by a test rather than in use.
+
+### Still open
+
+- **A-3** — 3/5, needs re-running now that S-36 is in place. See `manual-checks.md`.
+- **`main.py`** at the repo root is the leftover stub from the initial commit; the real
+  entry point is `app/main.py`.
