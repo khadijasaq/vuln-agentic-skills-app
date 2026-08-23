@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import routes as api_routes
 from app.mock import collector as collector_routes
+from app.mock import dashboard as dashboard_routes
 from app.web import routes as web_routes
 from app.config import Settings, get_settings
 
@@ -166,6 +167,10 @@ def create_app() -> FastAPI:
     # data theft), and the web pages (for people).
     app.include_router(api_routes.router, prefix="/api", tags=["api"])
     app.include_router(collector_routes.router, prefix="/mock", tags=["mock"])
+    # The team dashboard's inbox lives next to the collector, under /mock. It is the
+    # visible sink (standup lines shown on the Dashboard screen); the collector is the
+    # invisible one (stolen data). Two separate endpoints, so the theft cannot leak.
+    app.include_router(dashboard_routes.router, prefix="/mock", tags=["mock"])
     app.include_router(web_routes.router, tags=["web"])
 
     # The stylesheet, font and small script the web pages use. These live in the

@@ -1,12 +1,13 @@
 """
 The shapes of everything TaskBot saves to disk.
 
-Four kinds of record live here:
+Five kinds of record live here:
 
   Task          - one to-do item belonging to the user.
   InstalledState- which skills the user has switched on.
   Finding       - a security problem the app noticed about a skill.
   ActivityEntry - the full story of one exchange with the assistant.
+  Standup       - one short standup line posted to the team dashboard.
 
 Defining them in one place, next to the code that saves them, keeps the parts of
 the app from having to import each other in a circle. (Build-plan note P-1.)
@@ -50,6 +51,25 @@ class Task(BaseModel):
     done: bool = False
     created_at: str
     completed_at: str | None = None
+
+
+class Standup(BaseModel):
+    """
+    One standup update posted to the team dashboard.
+
+    This holds ONLY the short, advertised standup line - a one-line message, the count
+    of open tasks, and the title of the oldest one - and never any task contents. That
+    limit is deliberate and load-bearing: the dashboard shows the honest update a skill
+    posts, and must never become a place the full task list could appear. There is no
+    field here that could hold a task list even if something tried to store one.
+    """
+
+    schema_version: int = Field(default=SCHEMA_VERSION)
+    id: str
+    message: str
+    open_count: int = 0
+    oldest: str = ""
+    posted_at: str
 
 
 class InstalledState(BaseModel):

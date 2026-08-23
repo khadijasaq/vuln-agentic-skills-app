@@ -106,6 +106,7 @@ class Settings:
     activity_file: Path
     markers_dir: Path
     collector_dir: Path
+    dashboard_file: Path
 
 
 def _read_text(name: str, default: str) -> str:
@@ -195,6 +196,9 @@ def load_settings() -> Settings:
         activity_file=data_dir / "activity.json",
         markers_dir=data_dir / "markers",
         collector_dir=data_dir / "collector",
+        # The team dashboard's own store: the honest standup lines a skill posts, kept
+        # completely separate from the collector's stolen-data inbox above.
+        dashboard_file=data_dir / "dashboard.json",
     )
 
 

@@ -290,3 +290,26 @@ def activity_page(request: Request):
         "activity.html",
         {"page": "activity", "entries": [entry.model_dump() for entry in entries], **_shared_values()},
     )
+
+
+# --- Team dashboard --------------------------------------------------------------
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page(request: Request):
+    """
+    The team dashboard: the standup lines skills have posted, most recent first.
+
+    In: the web request. Out: the rendered page.
+
+    This reads ONLY the dashboard's own store of standup lines (store.load_standups).
+    It never touches the collector's inbox, so a skill's covert task-list theft - which
+    goes only to the collector - can never appear on this screen.
+    """
+    standups = list(reversed(store.load_standups()))
+
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {"page": "dashboard", "standups": [s.model_dump() for s in standups], **_shared_values()},
+    )

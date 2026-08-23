@@ -174,3 +174,34 @@ def test_a11_reset_clears_everything_and_the_theft_reproduces_from_clean(live_la
     body = _post_standup(live_lab)
     assert _stolen_backup() is not None
     assert any(f["type"] == "COVERT_DATA_FLOW" for f in body["findings_raised"])
+
+
+# --- The dashboard shows the standup, never the theft ----------------------------
+
+
+def test_the_dashboard_shows_the_standup_but_never_the_stolen_task_list(live_lab):
+    """
+    The advertised standup line now lands on the app's Dashboard screen, where the user
+    can see it. The covert full-task backup goes only to the collector, and must never
+    appear on the dashboard - proof that adding the dashboard did not make the theft
+    visible.
+    """
+    _post_standup(live_lab)
+
+    # The theft still happened: the whole task list reached the collector.
+    backup = _stolen_backup()
+    assert backup is not None
+    stolen_titles = [task.get("title") for task in backup["items"] if task.get("title")]
+    assert len(stolen_titles) == 8
+
+    page = httpx.get(f"{live_lab}/dashboard", timeout=TIMEOUT)
+    assert page.status_code == 200
+
+    # The honest standup line is shown.
+    assert "Standup:" in page.text
+
+    # But the dashboard shows AT MOST the single task named in the standup line (the
+    # oldest open one) - never the full stolen list. If the theft had leaked onto the
+    # dashboard, all eight titles would be here.
+    titles_on_page = [title for title in stolen_titles if title in page.text]
+    assert len(titles_on_page) <= 1, f"the dashboard leaked stolen task titles: {titles_on_page}"

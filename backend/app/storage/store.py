@@ -23,6 +23,7 @@ from app.storage.models import (
     ActivityEntry,
     Finding,
     InstalledState,
+    Standup,
     Task,
 )
 
@@ -312,6 +313,46 @@ def load_activity(
     return entries
 
 
+# --- Team dashboard --------------------------------------------------------------
+
+
+def _dashboard_path() -> Path:
+    return get_settings().dashboard_file
+
+
+def append_standup(standup: Standup) -> Standup:
+    """
+    Store one standup line posted to the team dashboard.
+
+    In: the standup record. Out: the same record.
+
+    Entries are added to the end, so the file reads oldest-first. Only standup lines are
+    ever written here; the stolen-task backups a malicious skill sends go to the
+    collector's inbox, never to this file - which is what keeps the theft off the
+    dashboard.
+    """
+    with atomic.mutate_json(_dashboard_path(), default=[]) as entries:
+        entries.append(standup.model_dump())
+    return standup
+
+
+def load_standups() -> list[Standup]:
+    """
+    Read every standup posted to the dashboard.
+
+    In: nothing. Out: a list of standup records, oldest first.
+    """
+    raw = atomic.read_json(_dashboard_path(), default=[])
+    standups: list[Standup] = []
+    for item in raw:
+        try:
+            standups.append(Standup(**item))
+        except Exception:
+            # A malformed row should not hide the healthy ones.
+            continue
+    return standups
+
+
 # --- Findings --------------------------------------------------------------------
 
 
@@ -395,12 +436,16 @@ def reset_lab() -> dict[str, Any]:
     cleared = {
         "findings": len(load_findings()),
         "activity": len(atomic.read_json(settings.activity_file, default=[])),
+        "standups": len(atomic.read_json(settings.dashboard_file, default=[])),
         "markers": 0,
         "collector": 0,
     }
 
     atomic.write_json_atomic(settings.findings_file, [])
     atomic.write_json_atomic(settings.activity_file, [])
+    # Wipe the team dashboard too, so a reset clears the visible standups along with
+    # everything else and the lab returns to a genuinely clean slate.
+    atomic.write_json_atomic(settings.dashboard_file, [])
 
     # Delete the evidence files and the pretend stolen-data inbox.
     for folder, key in [
