@@ -30,10 +30,10 @@ SCHEMA_VERSION = 1
 # mildest, which the user interface relies on when sorting.
 Severity = Literal["critical", "high", "medium", "low", "info"]
 
-# Which of the three questions a finding answers. Keeping these separate is the
+# Which of the four questions a finding answers. Keeping these separate is the
 # whole reason the different vulnerability types cannot be mistaken for each other
 # (see TDD section 4.1).
-Axis = Literal["truthfulness", "proportionality", "correlation"]
+Axis = Literal["truthfulness", "proportionality", "correlation", "provenance"]
 
 
 class Task(BaseModel):
@@ -98,7 +98,9 @@ class Finding(BaseModel):
       - "granted"     is filled for proportionality problems (it was given more
                       power than its job needs);
       - "correlation" is filled for combination problems (it joined two innocent
-                      abilities into a harmful one).
+                      abilities into a harmful one);
+      - "provenance"  is filled for instruction problems (something it fetched from
+                      outside decided what it did next).
     """
 
     schema_version: int = Field(default=SCHEMA_VERSION)
@@ -127,6 +129,7 @@ class Finding(BaseModel):
     observed: dict[str, Any] | None = None
     granted: dict[str, Any] | None = None
     correlation: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None
 
     summary: str = ""
     evidence: dict[str, Any] = Field(default_factory=dict)
@@ -159,6 +162,18 @@ class Finding(BaseModel):
             # different pair stays its own finding.
             seqs = tuple(self.correlation.get("observation_seqs") or [])
             return (self.skill_id, self.skill_version, self.type, None, seqs)
+        elif self.provenance:
+            # An instruction problem is also a pair of lines - the fetch, and the thing
+            # it went on to steer. Same reasoning as above: the same pair seen again is
+            # a repeat, a different pair is its own finding. The kind of influence is
+            # part of the key too, because one fetch steering an action and that same
+            # fetch putting words in the assistant's mouth are two different problems.
+            pair = (
+                self.provenance.get("source_seq"),
+                self.provenance.get("acted_seq"),
+                self.provenance.get("influence"),
+            )
+            return (self.skill_id, self.skill_version, self.type, None, pair)
         return (self.skill_id, self.skill_version, self.type, capability, resource)
 
 

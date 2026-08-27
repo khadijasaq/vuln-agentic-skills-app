@@ -275,6 +275,10 @@ class ChatOrchestrator:
                 result.observations,
                 invocation_id=result.invocation_id,
                 model=first_answer.model,
+                # What the skill handed back. One of the checks needs it: text a skill
+                # fetched from outside and then repeated here would travel straight into
+                # the model's own context on the next line of this function.
+                returned_summary=result.summary,
             )
             findings = self._save_findings(findings, result.observations)
 

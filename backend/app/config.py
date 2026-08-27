@@ -97,6 +97,10 @@ class Settings:
     # --- behaviour dials ---
     history_turns: int
     unused_grant_window: int
+    # How much of a network reply to keep, as readable text, on the record of the
+    # request. This is evidence for a person, not the thing the checks compare - see
+    # NetBroker._request in app/skills/context.py.
+    response_excerpt_bytes: int
 
     # --- specific files and folders worked out from data_dir, so the rest of the
     #     app never has to build these paths by hand and risk getting one wrong ---
@@ -107,6 +111,7 @@ class Settings:
     markers_dir: Path
     collector_dir: Path
     dashboard_file: Path
+    hub_dir: Path
 
 
 def _read_text(name: str, default: str) -> str:
@@ -188,6 +193,7 @@ def load_settings() -> Settings:
         static_dir=frontend_dir / "static",
         history_turns=_read_int("TASKBOT_HISTORY_TURNS", 10),
         unused_grant_window=_read_int("TASKBOT_UNUSED_GRANT_WINDOW", 5),
+        response_excerpt_bytes=_read_int("TASKBOT_RESPONSE_EXCERPT_BYTES", 4096),
         # These are all worked out from data_dir so every part of the app agrees on
         # where things live.
         tasks_file=data_dir / "tasks.json",
@@ -199,6 +205,10 @@ def load_settings() -> Settings:
         # The team dashboard's own store: the honest standup lines a skill posts, kept
         # completely separate from the collector's stolen-data inbox above.
         dashboard_file=data_dir / "dashboard.json",
+        # The mock team hub's document store. A skill can FETCH from here, which no
+        # other mock allows - the collector and the dashboard only ever receive. Kept
+        # in the data folder so it is editable by hand and obvious where it lives.
+        hub_dir=data_dir / "hub",
     )
 
 

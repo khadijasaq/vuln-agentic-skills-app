@@ -31,6 +31,7 @@ and 8; decisions S-19, S-26, S-27, S-28; invariants I-2 and I-3.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Literal
@@ -42,6 +43,8 @@ from app.config import get_settings
 from app.monitor.audit_hook import broker_frame
 from app.monitor.observations import (
     ObservationLog,
+    content_item_digests,
+    content_strings,
     digest_of,
     payload_item_digests,
     size_of,
@@ -333,6 +336,68 @@ class FileBroker(_BaseBroker):
             resolved.write_text(content, encoding="utf-8")
 
 
+def _record_response(observation, result: "BrokeredResponse") -> None:
+    """
+    Write down what came BACK from a network request.
+
+    In: the line already written for this request, and the reply that arrived.
+    Out: nothing (it adds to the line).
+
+    WHY THIS EXISTS. Until now the app wrote down everything about a request going out
+    - where to, how big, a fingerprint of what was sent - and nothing at all about the
+    reply. That gap mattered more than it looked. A skill that fetches a document and
+    then does what the document tells it to is doing something genuinely dangerous, and
+    with no record of the reply there was no way to show it had happened: the skill's
+    later actions looked like its own idea.
+
+    An analogy: the app was noting every letter posted and never the letters received -
+    so when someone acted on instructions that arrived in the post, the instructions
+    were invisible and only the obedience showed.
+
+    Three things are recorded, and they do different jobs:
+
+      response_sha256 / response_bytes   how big the reply was, and a fingerprint of the
+                                         whole of it.
+      response_item_digests              a fingerprint of every piece of text inside it.
+                                         This is what lets a later check prove that an
+                                         address in the reply is the same address the
+                                         skill then used.
+      response_strings                   those pieces of text themselves, needed for the
+                                         separate question of whether a line was passed
+                                         along word for word.
+      response_excerpt                   a readable slice of the reply, for a person.
+                                         Evidence, never used to decide anything.
+
+    This records; it decides nothing and blocks nothing. Whether any of it means a skill
+    misbehaved is worked out later and somewhere else - this file still has no idea what
+    any skill declared, and must not.
+
+    Note what is NOT recorded: nothing at all when a request was refused or failed,
+    because in those cases no reply ever arrived. A refused request keeps exactly the
+    record it always had.
+    """
+    settings = get_settings()
+    text = result.text or ""
+
+    observation.detail["response_bytes"] = len(text.encode("utf-8"))
+    observation.detail["response_sha256"] = digest_of(text)
+    # Keep a readable slice for a human reading the evidence file later. Deliberately
+    # bounded: a runaway reply must not be able to bloat every record it appears in.
+    observation.detail["response_excerpt"] = text[: settings.response_excerpt_bytes]
+
+    # Reading the reply as JSON is what lets us look inside it rather than treating it
+    # as one lump of text. If it is not JSON - a plain-text or HTML reply - we fall back
+    # to treating the whole body as a single piece of text, which still supports the
+    # "did the skill use this exact thing?" comparison, just less precisely.
+    try:
+        parsed = json.loads(text)
+    except (ValueError, TypeError):
+        parsed = text
+
+    observation.detail["response_item_digests"] = content_item_digests(parsed)
+    observation.detail["response_strings"] = content_strings(parsed)
+
+
 class NetBroker(_BaseBroker):
     """
     The official channel for network requests.
@@ -408,6 +473,7 @@ class NetBroker(_BaseBroker):
                 raise CapabilityRefused("net.outbound", url, "request_failed")
 
         observation.detail["status"] = result.status_code
+        _record_response(observation, result)
         return result
 
 

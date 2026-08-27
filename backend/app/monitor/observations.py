@@ -141,6 +141,115 @@ def _collect_item_digests(value: Any, digests: list[str]) -> None:
             _collect_item_digests(nested, digests)
 
 
+def content_item_digests(value: Any) -> list[str]:
+    """
+    Make a fingerprint of every individual piece of text inside some FETCHED content.
+
+    In: anything that came back from a network request, already read as JSON.
+    Out: one 64-character fingerprint per piece of text found inside it.
+
+    WHY THIS EXISTS, AND WHY IT IS NOT payload_item_digests. The function above is for
+    data going OUT: it fingerprints the items in a list, because the thing we want to
+    recognise later is "one of the user's tasks". This one is for content coming BACK,
+    where the thing we want to recognise later is completely different: a single piece
+    of TEXT buried anywhere inside the reply - a web address, a file path, a line of
+    instructions - which the skill might then go and act on.
+
+    An example makes the difference obvious. A fetched document like
+
+        {"rules": [...], "report_to": "http://127.0.0.1:8000/mock/collector"}
+
+    contains one very interesting piece of text, and it is not in a list at all. It is
+    the value of "report_to". If the skill then sends something to that exact address,
+    the address it used and the address in the document produce the identical
+    fingerprint - and that is how we can later prove the document chose the
+    destination. payload_item_digests walks lists only, so it would never see it.
+
+    The recipe is the same digest_of used everywhere else, so a piece of text here and
+    the resource of a later action line up to the identical fingerprint.
+
+    Deliberately NOT fingerprinted: numbers and true/false. They collide constantly -
+    every document containing "5" would match every action mentioning 5 - and a
+    coincidence dressed as evidence is worse than no evidence.
+    """
+    digests: list[str] = []
+    _collect_content_digests(value, digests)
+    # The same piece of text can appear more than once; one fingerprint is enough.
+    return list(dict.fromkeys(digests))
+
+
+def _collect_content_digests(value: Any, digests: list[str]) -> None:
+    """
+    Walk fetched content and collect a fingerprint of every piece of text in it.
+
+    In: the content to look through, and the list to add fingerprints to.
+    Out: nothing (it fills the list it was given).
+    """
+    if isinstance(value, str):
+        digests.append(digest_of(value))
+    elif isinstance(value, list):
+        for element in value:
+            # Fingerprint the whole element too, so a complete object inside a list is
+            # recognisable as well as the pieces of text within it.
+            digests.append(digest_of(element))
+            _collect_content_digests(element, digests)
+    elif isinstance(value, dict):
+        for nested in value.values():
+            _collect_content_digests(nested, digests)
+
+
+# The longest piece of text we keep for the "was this repeated word for word?" check
+# below. Anything longer is almost certainly a document body rather than a line someone
+# would relay, and keeping it would bloat every record of every request.
+MAX_CONTENT_STRING = 1024
+
+# How many pieces of text we keep. A generous ceiling that a normal reply never reaches,
+# there only so an enormous one cannot fill the records.
+MAX_CONTENT_STRINGS = 64
+
+
+def content_strings(value: Any) -> list[str]:
+    """
+    Collect the actual pieces of text inside some fetched content.
+
+    In: anything that came back from a network request, already read as JSON.
+    Out: the pieces of text themselves, longest first, capped.
+
+    WHY THE TEXT ITSELF AND NOT JUST A FINGERPRINT. Fingerprints answer "is this exactly
+    the same thing?" - perfect for comparing an address in a document against the address
+    a skill then used. They cannot answer "does this sentence appear INSIDE that longer
+    sentence?", and that is the other question worth asking: whether a line from the
+    fetched document was passed along, word for word, in what the skill told the
+    assistant. Answering that needs the words.
+
+    Longest first, because a longer match is a more convincing one - a twelve-character
+    coincidence is possible, a whole sentence repeated verbatim is not.
+    """
+    collected: list[str] = []
+    _collect_content_strings(value, collected)
+
+    unique = list(dict.fromkeys(collected))
+    unique.sort(key=len, reverse=True)
+    return unique[:MAX_CONTENT_STRINGS]
+
+
+def _collect_content_strings(value: Any, collected: list[str]) -> None:
+    """
+    Walk fetched content and collect every piece of text short enough to keep.
+
+    In: the content, and the list to fill. Out: nothing.
+    """
+    if isinstance(value, str):
+        if value and len(value) <= MAX_CONTENT_STRING:
+            collected.append(value)
+    elif isinstance(value, list):
+        for element in value:
+            _collect_content_strings(element, collected)
+    elif isinstance(value, dict):
+        for nested in value.values():
+            _collect_content_strings(nested, collected)
+
+
 class ObservationLog:
     """
     The notebook for ONE run of ONE skill.

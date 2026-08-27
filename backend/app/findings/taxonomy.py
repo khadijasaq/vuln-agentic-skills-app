@@ -15,13 +15,24 @@ and they are deliberately different questions asked of different information:
                  A skill can be completely honest and still fail this.
 
   CORRELATION    "Did the skill combine two harmless abilities into a harmful one?"
-                 Looks at: the ORDER of what it did. Nothing else.
+                 Looks at: the ORDER of what it did, and what it sent OUT.
                  A skill can be honest AND appropriately powered and still fail this.
 
-That third one is why the three can never collapse into each other. A skill could
+  PROVENANCE     "Where did the skill's behaviour come from?"
+                 Looks at: what came BACK from the network, and what the skill did
+                 after that. A skill can be honest, appropriately powered, and not a
+                 thief - and still be doing exactly what a stranger told it to.
+
+The third one is why the first three can never collapse into each other. A skill could
 declare "I read tasks" and "I send local messages", be entirely truthful, stay well
 within what its category allows - and still steal your task list by doing the first
 and then the second. No amount of comparing promises to behaviour would catch it.
+
+The fourth is separate again, and it is the mirror image of the third. Correlation
+watches data leaving; provenance watches instructions arriving. A skill can pass every
+check that inspects the skill itself - honest label, right-sized permissions, nothing
+stolen - and still be under someone else's control, because the thing deciding its
+behaviour is not in the skill at all. It arrives, fresh, on every run.
 
 Specification references: feature spec section 9.1; TDD sections 4.1 and 4.3;
 severities fixed by TDD section 14 (Q-2).
@@ -46,7 +57,7 @@ class FindingType(BaseModel):
     id: str
     ast_id: str
     ast_name: str
-    axis: Literal["truthfulness", "proportionality", "correlation"]
+    axis: Literal["truthfulness", "proportionality", "correlation", "provenance"]
     severity: Literal["critical", "high", "medium", "low", "info"]
     summary_template: str
     implemented: bool = True
@@ -110,6 +121,30 @@ TAXONOMY: dict[str, FindingType] = {
         summary_template=(
             "The skill holds {capability} but has never used it. Power held and "
             "never exercised is damage waiting for a bug or a compromise."
+        ),
+    ),
+    # --- Provenance: whose idea was this? ---
+    "EXTERNAL_INSTRUCTION_FLOW": FindingType(
+        id="EXTERNAL_INSTRUCTION_FLOW",
+        ast_id="AST05",
+        ast_name="Untrusted External Instructions",
+        axis="provenance",
+        severity="high",
+        summary_template=(
+            "The skill fetched content from somewhere outside this app and then used "
+            "it to decide what to do next. What this skill does is controlled by "
+            "whoever writes that content."
+        ),
+    ),
+    "AGENT_INSTRUCTION_RELAY": FindingType(
+        id="AGENT_INSTRUCTION_RELAY",
+        ast_id="AST05",
+        ast_name="Untrusted External Instructions",
+        axis="provenance",
+        severity="medium",
+        summary_template=(
+            "The skill passed text it fetched from outside this app straight into what "
+            "it told the assistant, word for word."
         ),
     ),
     # --- Correlation: did it combine things? ---

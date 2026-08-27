@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import routes as api_routes
 from app.mock import collector as collector_routes
 from app.mock import dashboard as dashboard_routes
+from app.mock import hub as hub_routes
 from app.web import routes as web_routes
 from app.config import Settings, get_settings
 
@@ -68,6 +69,7 @@ def step_prepare_data_folder(settings: Settings) -> None:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     settings.markers_dir.mkdir(parents=True, exist_ok=True)
     (settings.collector_dir / "inbox").mkdir(parents=True, exist_ok=True)
+    settings.hub_dir.mkdir(parents=True, exist_ok=True)
 
 
 def step_seed_tasks(settings: Settings) -> None:
@@ -82,6 +84,46 @@ def step_seed_tasks(settings: Settings) -> None:
     from app.storage import seed
 
     seed.seed_tasks_if_absent()
+
+
+def step_seed_hub_document(settings: Settings) -> None:
+    """
+    Put a starter document in the mock team hub, if there is not one already.
+
+    In: the settings. Out: nothing.
+
+    The hub serves a document that skills can fetch. Where does the starter document
+    come from? From whichever weakness folder ships one - the same arrangement used for
+    skills themselves, where the app looks in every `vulnerabilities/*/skill/` folder
+    rather than being told about particular weaknesses by name.
+
+    That generality is deliberate and worth keeping. This file must not know that a
+    weakness called "ast05" exists; it knows only that a weakness MAY ship a hub
+    document, and serves whichever it finds. Naming one here would put a weakness's
+    content inside the shared platform, which is exactly the separation the project
+    depends on.
+
+    Only ever copies when the destination is absent, so a document someone has edited by
+    hand is never overwritten on restart. Deleting the file and restarting puts the
+    original back.
+    """
+    import shutil
+
+    destination = settings.hub_dir / "rules.json"
+    if destination.exists():
+        return
+
+    if not settings.vulnerabilities_dir.exists():
+        return
+
+    # Sorted, so the choice is the same on every machine and every run.
+    for folder in sorted(settings.vulnerabilities_dir.iterdir()):
+        candidate = folder / "hub" / "rules.json"
+        if candidate.is_file():
+            settings.hub_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(candidate, destination)
+            logger.info("Seeded the team hub's document from %s.", folder.name)
+            return
 
 
 def step_load_policy(settings: Settings) -> None:
@@ -124,6 +166,7 @@ STARTUP_STEPS: list[tuple[str, Callable[[Settings], None]]] = [
     ("install_audit_hook", step_install_audit_hook),
     ("prepare_data_folder", step_prepare_data_folder),
     ("seed_tasks", step_seed_tasks),
+    ("seed_hub_document", step_seed_hub_document),
     ("load_policy", step_load_policy),
     ("discover_skills", step_discover_skills),
 ]
@@ -171,6 +214,10 @@ def create_app() -> FastAPI:
     # visible sink (standup lines shown on the Dashboard screen); the collector is the
     # invisible one (stolen data). Two separate endpoints, so the theft cannot leak.
     app.include_router(dashboard_routes.router, prefix="/mock", tags=["mock"])
+    # The third mock, and the only one that hands something OUT. The other two receive;
+    # this one serves a document a skill can fetch - which is what makes it possible to
+    # show a skill taking its orders from outside itself.
+    app.include_router(hub_routes.router, prefix="/mock", tags=["mock"])
     app.include_router(web_routes.router, tags=["web"])
 
     # The stylesheet, font and small script the web pages use. These live in the

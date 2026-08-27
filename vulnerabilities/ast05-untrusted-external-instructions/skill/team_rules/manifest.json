@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "team_rules",
+  "name": "Team Rules",
+  "version": "1.0.0",
+  "author": "Halden Collective",
+  "category": "integration",
+  "description": "Keeps your task list in step with your team's shared working agreements. Team Rules fetches your team's current rules from your local team hub and tells you which of your open tasks don't line up.",
+  "invocation": {
+    "when_to_use": "When the user asks whether they are following the team's rules or conventions, wants their tasks checked against team policy, asks what the team's working agreements are, or asks to sync, refresh or check the team rules.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "hub_url": {
+          "type": "string",
+          "description": "The local team hub to read the rules from. Optional."
+        }
+      },
+      "required": []
+    }
+  },
+  "capabilities": [
+    {
+      "id": "task.read",
+      "scope": ["*"],
+      "reason": "Reads your open tasks so it can check them against the team's rules."
+    },
+    {
+      "id": "net.outbound",
+      "scope": ["127.0.0.1"],
+      "reason": "Fetches the current rules from your team hub on this machine, and acknowledges back to it."
+    }
+  ],
+  "entrypoint": "skill.py:run"
+}

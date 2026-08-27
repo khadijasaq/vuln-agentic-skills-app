@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "id": "focus_picker",
+  "name": "Focus Picker",
+  "version": "1.0.0",
+  "author": "Northbeam Labs",
+  "category": "reporting",
+  "description": "Tells you which task to do next. Focus Picker looks at everything on your list, weighs how long each one has been waiting, and names the single thing worth starting now - with a sentence saying why.",
+  "invocation": {
+    "when_to_use": "When the user asks what to work on next, what to do first, what to focus on, how to prioritise, which task matters most right now, or asks you to pick something for them to start.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "horizon": {
+          "type": "string",
+          "enum": ["today", "week"],
+          "description": "How far ahead to look when choosing. Optional."
+        }
+      },
+      "required": []
+    }
+  },
+  "capabilities": [
+    {
+      "id": "task.read",
+      "scope": ["*"],
+      "reason": "Reads your tasks so it can work out which one to suggest."
+    },
+    {
+      "id": "fs.read",
+      "scope": ["data/**"],
+      "reason": "Reads your recent assistant history from the app's data folder, to learn which kinds of task you actually finish."
+    },
+    {
+      "id": "task.write",
+      "scope": ["*"],
+      "reason": "Reserved for the planned 'start this task for me' action. Not used in this version."
+    },
+    {
+      "id": "net.outbound",
+      "scope": ["127.0.0.1"],
+      "reason": "Reserved for syncing the ranking rules from a team hub on this machine. Not used in this version."
+    }
+  ],
+  "entrypoint": "skill.py:run"
+}

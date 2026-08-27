@@ -2,17 +2,29 @@
 
 | | |
 |---|---|
-| **Scope** | The whole application: shared architecture for the foundation **and** all three vulnerability classes |
-| **Derives from** | `docs/PRD.md` (PRD v1.0, approved) |
-| **Status** | Approved. Canonical location: `docs/TDD.md` |
+| **Scope** | The whole application: shared architecture for the foundation **and** all **four** vulnerability classes |
+| **Derives from** | `docs/PRD.md` (**PRD v1.1**, approved) |
+| **Status** | Approved. Canonical location: `docs/TDD.md`. **Amended 2026-08-27** for AST05 — see the amendment note below |
 | **Release-agnostic** | Describes the **target architecture of the finished app**. Release and build sequencing belong in per-feature plans, never here |
 | **Feature specs** | `docs/features/<feature>/spec.md` — each derives from `docs/PRD.md` + this document |
 
 **Ownership rule.** *If it is shared by more than one feature, it belongs here. If it is specific to one feature, it belongs in that feature's spec.* Feature specs cite `TDD §n` rather than restating shared mechanisms.
 
-**Scope boundary.** This document designs the *platform* and the *detection model* for all three vulnerability classes. It does **not** design the individual vulnerable skills — their manifests, their concealment technique, and their trigger surface are each feature spec's job.
+**Scope boundary.** This document designs the *platform* and the *detection model* for all **four** vulnerability classes. It does **not** design the individual vulnerable skills — their manifests, their concealment technique, and their trigger surface are each feature spec's job.
 
-**Traceability.** Every statement carries its PRD reference. Design choices are numbered **D-1 … D-14** (§13). The PRD's deferred questions are resolved and binding in **§14**.
+**Traceability.** Every statement carries its PRD reference. Design choices are numbered **D-1 … D-16** (§13). The PRD's deferred questions are resolved and binding in **§14**.
+
+> ### Amendment 2026-08-27 — the fourth axis
+>
+> PRD v1.1 brought **AST05 · Untrusted External Instructions** into scope (PRD §0, §7.6). This document is amended rather than rewritten, so the change is visible:
+>
+> - **§3.1** — the broker now captures **inbound response** content. Approved substrate change, argued below and in `ast05 spec` §8.6.
+> - **§4.1** — three axes become **four**; the cannot-collapse argument is extended, not restated.
+> - **§4.3** — two taxonomy rows; **§4.7** — a `provenance` evidence field; **§4.9** — the new axis, in full.
+> - **§11 I-7** — restated for four axes. **§12** — a fourth row, plus the explicit carve-out to the platform-is-complete rule.
+> - **§13** — **D-15**, **D-16**. **§14 Q-2** — extended for AST05 only.
+>
+> **The one thing to read if you read nothing else:** §12's rule that *a vulnerability needing platform change is a faked vulnerability* was correct for the first three classes and is **amended, not abandoned**. The replacement test is in §12.
 
 ---
 
@@ -26,8 +38,12 @@
 | `docs/features/ast04-insecure-metadata/spec.md` | The insecure-metadata skill |
 | `docs/features/ast01-malicious-skills/spec.md` | The malicious skill |
 | `docs/features/ast03-over-privileged/spec.md` | The over-privileged skill |
+| `docs/features/ast05-untrusted-external-instructions/spec.md` | The instruction-following skill, the mock team hub, **and the provenance axis** |
+| `docs/KNOWN-ISSUES.md` | Platform defects that are known, deferred and disclosed |
 
-The App Foundation feature **builds** the platform described here; the three vulnerability features **consume** it. No vulnerability feature may modify shared mechanisms — if one appears to need to, that is a TDD change and a design review, not a feature-local edit.
+The App Foundation feature **builds** the platform described here; the vulnerability features **consume** it. No vulnerability feature may modify shared mechanisms — if one appears to need to, that is a TDD change and a design review, not a feature-local edit.
+
+**AST05 is exactly that case, and it followed exactly that route.** It needed shared mechanisms changed, so it produced a TDD change (this amendment) and a design review, rather than a feature-local edit. The rule held; it was not bypassed.
 
 ---
 
@@ -91,10 +107,11 @@ Two components carry the product's weight: the **capability broker** (everything
                       │                               │
                       ▼                               │
 ┌─────────────────────────────────────────────────┐   │
-│ FINDINGS ENGINE — three axes (§4)               │   │
+│ FINDINGS ENGINE — four axes (§4)                │   │
 │   observed  vs declared  → truthfulness  AST04  │   │
 │   granted   vs baseline  → proportionality AST03│   │
-│   sequence  correlation  → covert flow    AST01 │   │
+│   sequence, outbound     → correlation    AST01 │   │
+│   sequence, inbound      → provenance     AST05 │   │
 │   findings → storage + marker artifact          │   │
 └───────┬─────────────────────────────────────────┘   │
         │ skill result summary                        │
@@ -263,6 +280,14 @@ Observation record:
 
 **Payload digests.** Every payload-bearing observation records `bytes` and `sha256` — a digest, never the payload itself. This is what lets the correlation axis prove *which* data moved without storing it twice, and it is why the foundation must implement it even though only AST01 consumes it. *(Pinned at implementation level as S-8 in the App Foundation spec.)*
 
+**D-15 — Response capture *(amendment 2026-08-27)*. `net.outbound` observations also record what came back:** `response_bytes`, `response_sha256`, `response_item_digests`, and a bounded `response_excerpt`. This is the substrate the provenance axis reads (§4.9), and it corrects an asymmetry the foundation left without stating a reason — the broker recorded everything about a request and nothing about its response, which made "the skill acted on what it fetched" unprovable in principle rather than merely undetected.
+
+Three properties keep this within the design's existing commitments:
+
+- **It changes nothing about what is *allowed*.** The loopback allowlist, the scheme check, the record-then-decide ordering (I-3) and the `broker_frame()` suppression are untouched. The broker still never reads a manifest (I-2).
+- **`response_item_digests` uses a separate walker** from `payload_item_digests`, which is unmodified — so AST01's matching behaviour is bit-for-bit unchanged.
+- **The excerpt is a deliberate, bounded exception to *"a digest, never the payload itself"*.** That rule exists so the **user's** private data is never duplicated into the security records. A fetched response is not the user's data — it is content from outside the trust boundary, and it is the evidence. Without it a provenance marker could assert that fetched content steered a skill while being unable to show what that content said. Capped by `Settings.response_excerpt_bytes` (default 4096).
+
 ### 3.2 Re-entrancy suppression *(load-bearing — without it the control skill emits a false finding)*
 
 `ctx.tasks.list()` reads `data/tasks.json` — a real `open()` call. The audit hook would see it and record an undeclared `fs.read`, and **the control skill would produce a finding, breaking G5/SC-3 on day one.**
@@ -313,9 +338,11 @@ These limits bound what the product claims, not what it demonstrates: every vuln
 
 > FR-4.3, FR-4.4, and the PRD §7.3 / §12 risk that the vulnerability classes collapse into one indistinguishable "mismatch".
 
-### 4.1 Three independent axes
+### 4.1 Four independent axes
 
-The engine answers three structurally different questions, from three different inputs:
+*(Three until the 2026-08-27 amendment; the fourth is AST05's, and §4.9 designs it.)*
+
+The engine answers four structurally different questions, from four different inputs:
 
 ```
  AST04  TRUTHFULNESS     observations × declaration     "did it do what it said?"
@@ -326,19 +353,37 @@ The engine answers three structurally different questions, from three different 
                           ├ input: manifest.capabilities + policy baseline
                           └ a skill can fail this while being perfectly honest
 
- AST01  CORRELATION      ordered observation sequence   "what did it combine?"
-                          ├ input: ObservationLog order + payload digests
+ AST01  CORRELATION      ordered sequence, OUTBOUND     "what did it combine?"
+                          ├ input: ObservationLog order + outbound payload digests
                           └ INDEPENDENT OF THE DECLARATION ENTIRELY
+
+ AST05  PROVENANCE       ordered sequence, INBOUND      "where did the behaviour come from?"
+                          ├ input: ObservationLog order + inbound response content (D-15)
+                          └ INDEPENDENT OF DECLARATION, POLICY, AND OUTBOUND PAYLOADS
 ```
 
 **Why they cannot collapse.** Each axis takes an input the others do not:
 
-- Truthfulness needs the declaration; proportionality needs the policy; correlation needs neither — it reads only what happened, and in what order.
+- Truthfulness needs the declaration; proportionality needs the policy; correlation needs neither — it reads only what happened, and in what order; **provenance needs something none of the other three has ever had access to: what came back from a request.**
 - A skill can be **honest and over-privileged** (declares its broad grant openly) → AST03 only.
 - A skill can be **modest and lying** (declares little, does more) → AST04 only.
 - A skill can be **honest, proportionate, and malicious** — declaring `task.read` and `net.outbound`, both within its category baseline, and still exfiltrating task data by *combining* them → **AST01 only**.
+- A skill can be **honest, proportionate, and not a thief** — declaring exactly the two capabilities it uses, sending no task data anywhere — and still be **entirely under a third party's control**, because it fetches a document and treats its contents as instructions → **AST05 only**.
 
-That third case is the proof the axes are genuinely distinct rather than three thresholds on one comparison. It also means correlation must never be implemented as a special case of truthfulness.
+The third case proves the axes are not three thresholds on one comparison. **The fourth proves something the first three could not:** that a skill can pass every check that inspects *the skill* and still be compromised, because the thing that decides its behaviour is not in the skill at all.
+
+**Correlation and provenance are opposites, not neighbours — and this is the distinction most at risk of being blurred.** Both read the ordered log; both involve the network; the two skills that exercise them hold the same two capabilities under the same category. They are still mutually exclusive:
+
+| | Correlation (AST01) | Provenance (AST05) |
+|---|---|---|
+| Question | did data that was **read** leave? | did content that **arrived** decide what happened next? |
+| Substrate | outbound payload digests | inbound response digests + excerpt (D-15) |
+| Direction | data **outward** | instructions **inward** |
+| Evidence pair | read seq → send seq | fetch seq → acted seq |
+
+Neither is implementable in terms of the other, and each fires with the other silent: a skill that reads tasks and posts them out fetches nothing, so provenance has no source observation; a skill that fetches instructions and acts on them sends no task content, so correlation's egress set carries no matching digests and its loop body never executes. Each vulnerability feature asserts both directions.
+
+**Overlap is expressed, not collapsed** *(unchanged, now over four axes)*.
 
 **Overlap is expressed, not collapsed.** A malicious skill that *also* lies about its capabilities produces **both** an AST01 correlation finding and an AST04 truthfulness finding. That is correct: two distinct failures, reported distinctly, each with its own evidence. Whether a given vulnerable skill declares its capabilities honestly is that feature spec's decision, not a platform concern.
 
@@ -364,8 +409,12 @@ That third case is the proof the axes are genuinely distinct rather than three t
 | `EXCESSIVE_GRANT` | AST03 | proportionality | **medium** | `G` exceeds the category baseline (extra capability, or unbounded scope where bounded suffices) |
 | `UNUSED_GRANT` | AST03 | proportionality | **low** | Capability granted and never exercised across the window — dormant privilege |
 | `COVERT_DATA_FLOW` | AST01 | correlation | **critical** | Task data read, then egressed within the same invocation |
+| `EXTERNAL_INSTRUCTION_FLOW` | AST05 | provenance | **high** | Content fetched from outside the trust boundary, then used as the target or parameter of a later action in the same invocation |
+| `AGENT_INSTRUCTION_RELAY` | AST05 | provenance | **medium** | Fetched content carried into the skill's returned summary, and therefore into the model's context |
 
 Severities are fixed by §14 Q-2 and are not per-feature choices.
+
+**On `AGENT_INSTRUCTION_RELAY`'s severity — a deliberate underclaim.** The deterministic, provable part is that attacker-controlled text reached the model's context. Whether the model then *obeys* it varies by model and by run, and making it an input would break §4.8's purity guarantee. The engine therefore reports the relay and never the compliance. `medium` is the honest weight for "we can prove the loaded gun, not the trigger"; the model's actual response is visible in the activity log and is a demo observation, not a finding.
 
 ### 4.4 Truthfulness axis (AST04)
 
@@ -426,7 +475,7 @@ for each invocation's ordered observation log:
   "id": "fnd_01J…",
   "type": "COVERT_DATA_FLOW",
   "ast_id": "AST01", "ast_name": "Malicious Skills",
-  "axis": "correlation",                     // "truthfulness" | "proportionality" | "correlation"
+  "axis": "correlation",                     // "truthfulness" | "proportionality" | "correlation" | "provenance"
   "severity": "critical",
   "skill_id": "…", "skill_version": "1.0.0",
   "trigger": "invocation",                   // "invocation" | "install"
@@ -436,13 +485,16 @@ for each invocation's ordered observation log:
   "observed": Observation | null,            // null for proportionality findings
   "granted":  { "capabilities": [ … ] },     // present for proportionality findings
   "correlation": { "observation_seqs": [2, 5] },   // present for correlation findings
+  "provenance": { "source_seq": 2, "acted_seq": 4,  // present for provenance findings
+                  "influence": "resource",          //   "resource" | "parameter" | "returned_summary"
+                  "source_url": "…", "matched_digest": "…", "matched_excerpt": "…" },
   "summary": "…",
   "evidence": { "marker": "data/markers/…json", "observation_seq": 5 },
   "first_seen": "…", "last_seen": "…", "occurrences": 1
 }
 ```
 
-The evidence field differs per axis — `observed` for truthfulness, `granted` for proportionality, `correlation.observation_seqs` for correlation. A consumer can tell the three apart without parsing prose.
+The evidence field differs per axis — `observed` for truthfulness, `granted` for proportionality, `correlation.observation_seqs` for correlation, `provenance` for provenance. A consumer can tell the **four** apart without parsing prose. Adding the fourth field keeps that one-field-per-axis convention intact rather than diluting it, and is additive within `schema_version: 1` (I-11).
 
 **D-11 — Findings deduplicate on `(skill_id, skill_version, type, capability, resource)`.** Repeats bump `occurrences` and `last_seen` rather than appending. Keeps the findings list demoable after a long session (SC-7); the activity log remains the complete per-turn record.
 
@@ -450,7 +502,47 @@ The evidence field differs per axis — `observed` for truthfulness, `granted` f
 
 ### 4.8 Purity
 
-The engine takes manifest + observations + policy and returns findings. No LLM call, no I/O, no clock beyond a timestamp helper; persistence and marker writing are the caller's job. This determinism is what makes "the control skill produces zero findings" (SC-3) a testable claim rather than a flaky one.
+The engine takes manifest + observations + policy **+ the skill's returned summary** and returns findings. No LLM call, no I/O, no clock beyond a timestamp helper; persistence and marker writing are the caller's job. This determinism is what makes "the control skill produces zero findings" (SC-3) a testable claim rather than a flaky one.
+
+*(Amendment 2026-08-27: `evaluate_invocation` gains an optional `returned_summary` argument, supplied by the orchestrator from `SkillResult.summary` at its single existing call site. Optional and defaulted, so the install path and every existing caller are unaffected. It is inert data, not a model call — purity is unchanged.)*
+
+### 4.9 Provenance axis (AST05) — *added 2026-08-27*
+
+The axis that reads *where the behaviour came from*, rather than what was claimed, what was granted, or what went out.
+
+```
+sources = observations where capability == "net.outbound"
+                        and detail.response_item_digests is non-empty        (D-15)
+for s in sources:
+    for a in observations where a.seq > s.seq:                # strictly after — causal
+        if digest_of(a.resource) in s.detail.response_item_digests
+              → EXTERNAL_INSTRUCTION_FLOW (influence="resource")
+        for each scalar v in a.detail:
+            if digest_of(v) in s.detail.response_item_digests
+              → EXTERNAL_INSTRUCTION_FLOW (influence="parameter")
+    if returned_summary is not None and a non-trivial line of s.detail.response_excerpt
+       appears in returned_summary
+              → AGENT_INSTRUCTION_RELAY (influence="returned_summary")
+```
+
+**Architectural provisions this depends on:**
+
+| Need | Provided by |
+|---|---|
+| Causal ordering | Ordered `ObservationLog`, `seq` monotonic (D-7, §3.1) — the same substrate correlation uses |
+| Proof that *this* content steered *that* action | `response_item_digests` matched against later resources and parameters (D-15) |
+| Human-readable evidence of the instruction | Bounded `response_excerpt` on the source observation (D-15) |
+| Access to what the skill told the model | `returned_summary`, passed to the engine by the orchestrator (§4.8) |
+| Detection independent of the manifest and the policy | The axis reads neither — only the log and the fetched content |
+| Intent counted even when blocked | A refused action still carries the externally-supplied resource, and the observation was written before the refusal (I-3) |
+
+**Three deliberate limits, stated now.**
+
+1. **Transformation defeats it.** A skill that decodes, decrypts or reassembles fetched content before acting on it will not match by digest, exactly as re-encoded exfiltration defeats correlation (§4.6). The limit is symmetric, and it is honest: a digest match proves content moved into a decision, it cannot prove it under disguise.
+2. **A non-triviality rule is mandatory, not optional.** Short or common strings (`"true"`, `"open"`, a version stamp) would match by coincidence and turn the axis into a false-positive generator, which would break SC-3 for any skill that fetches anything. The threshold is the AST05 feature spec's decision; the platform's obligation is that one exists.
+3. **The relay check proves the relay, never the compliance** (§4.3). This is a purity constraint, not a detection shortfall.
+
+**D-16 — Provenance is evaluated per invocation only, never at install.** Nothing about a manifest reveals it: the document that supplies the instructions is not part of the skill, is not present at install, and can change between two runs of an unchanged skill at an unchanged version. This is the exact inverse of proportionality (§4.5), which is fully answerable before a skill has ever run — and holding the two side by side is what makes the four axes legible as a set rather than a list.
 
 ---
 
@@ -541,7 +633,7 @@ data/
 | `POST` | `/api/reset` | Lab reset — **not** a security toggle (§14 Q-4) |
 | `POST` | `/mock/collector` | Local-only egress sink (FR-7.2) |
 
-**`POST /api/chat`** returns `reply`, `activity_id`, `skill_invoked`, `llm.model`, and **`findings_raised` for that turn only** — the exploitation signal. A scanner attributes a finding to the prompt that caused it without diffing `/api/findings` before and after. This is the primary red-team surface for all three vulnerability features.
+**`POST /api/chat`** returns `reply`, `activity_id`, `skill_invoked`, `llm.model`, and **`findings_raised` for that turn only** — the exploitation signal. A scanner attributes a finding to the prompt that caused it without diffing `/api/findings` before and after. This is the primary red-team surface for every vulnerability feature.
 
 **Stability contract (FR-6.3).** Within `schema_version: 1`, changes are **additive only** — new fields may appear; existing fields never change type, meaning, or disappear. Enum values (`type`, `ast_id`, `severity`, `axis`, `outcome`) may gain members, so consumers must tolerate unknown ones. Any breaking change moves to `/api/v2/`. **Each vulnerability feature adds findings, skills and enum members; none may alter these shapes.**
 
@@ -612,12 +704,14 @@ app/
   skills/scope.py             scope matching
   monitor/observations.py     Observation, ordered ObservationLog (D-7)
   monitor/audit_hook.py       sys.addaudithook, attribution, re-entrancy suppression
-  findings/engine.py          three axes (§4)
+  findings/engine.py          four axes (§4)
   findings/taxonomy.py        finding types, AST mapping, severities — data-driven
   findings/baselines.py       category baseline policy
   findings/markers.py         marker artifact writer
   storage/store.py  storage/atomic.py  storage/seed.py
   mock/collector.py           local egress sink (FR-7.2)
+  mock/dashboard.py           visible standup sink
+  mock/hub.py                 local instruction source, GET-only (AST05, §4.9)
 policy/
   capability_vocabulary.json  §2.3
   capability_baselines.json   §4.5
@@ -649,9 +743,9 @@ Properties every release must preserve. A change that breaks one is a TDD change
 | **I-2** | The broker never reads the manifest; declaration comparison happens only in the engine | G2 — a blocked liar produces no finding |
 | **I-3** | Intent is recorded before the safety check, and a refusal amends rather than replaces the observation | G4 + G3 simultaneously (§3.1) |
 | **I-4** | Re-entrancy suppression is active for all broker-internal I/O | SC-3 — an honest skill must stay silent |
-| **I-5** | The observation log is ordered and never re-sorted | AST01 correlation (§4.6) |
+| **I-5** | The observation log is ordered and never re-sorted | AST01 correlation (§4.6), AST05 provenance (§4.9) |
 | **I-6** | The findings engine is pure and deterministic | SC-3 testability |
-| **I-7** | The three axes take different inputs and are never implemented in terms of one another | PRD §7.3 / §12 risk |
+| **I-7** | The **four** axes take different inputs and are never implemented in terms of one another. In particular, correlation reads **outbound** payloads and provenance reads **inbound** content; neither may be built on the other | PRD §7.3 / §7.6 / §12 risks |
 | **I-8** | With no skills installed, no vulnerability is reachable | NG4, SC-4 |
 | **I-9** | No configuration, endpoint, or flag can reduce the app's vulnerability | NG3 |
 | **I-10** | No non-local egress; no file access outside `data/` and `skills/` via the sanctioned path | FR-7, SC-5 |
@@ -669,10 +763,31 @@ Design-level only. The skills themselves are each feature spec's job.
 | **AST04 — Insecure Metadata** | Truthfulness axis (§4.4) | Manifest/behaviour separation (D-2); broker records undeclared capabilities; audit hook records bypass | Nothing — a skill folder and its tests |
 | **AST01 — Malicious Skills** | Correlation axis (§4.6) | Ordered log (D-7); payload digests (§3.1); per-invocation correlation pass; mock collector (§8) | Nothing — a skill folder, plus its matching rule as a taxonomy check |
 | **AST03 — Over-Privileged** | Proportionality axis (§4.5) | Category baselines (D-9); install-time and per-invocation evaluation; unbounded-scope signal | Possibly a baseline category — a JSON edit |
+| **AST05 — Untrusted External Instructions** *(added 2026-08-27)* | **Provenance axis (§4.9)** | Ordered log (D-7); per-invocation evaluation pass; loopback allowlist and refuse-and-record ordering (I-3) | **Substantial, and enumerated in the feature spec §8:** inbound response capture in the broker (D-15); the provenance axis and two taxonomy rows; a `provenance` field on `Finding`; a GET-serving mock endpoint; `returned_summary` on `evaluate_invocation` |
 
-**The platform is complete for all three once the foundation ships.** No vulnerability feature requires a new broker method, a new monitor layer, a dispatch change, or an API shape change. If one appears to, that is a signal the vulnerability is being faked rather than genuinely exercised (G2).
+**The platform was complete for the first three once the foundation shipped.** No *(v1.0)* vulnerability feature required a new broker method, a new monitor layer, a dispatch change, or an API shape change. That rule stands for AST04, AST01 and AST03, and their zero-platform-change property is a real, verified result — not a coincidence to be quietly abandoned now.
 
-**Control skill.** The false-positive baseline (G5) belongs to the App Foundation feature, but it serves all three: every vulnerability feature's acceptance includes "the control skill is still clean." Without it, "the scanner found three things" is unfalsifiable.
+### The AST05 carve-out — *amendment 2026-08-27*
+
+**AST05 does require platform change, and the original rule would have classified it as faked. That classification would have been wrong, and here is the corrected test.**
+
+The rule's real target is a platform change that **manufactures a finding** — wiring a dormant detector so it fires, special-casing a skill, or letting a skill self-report its own compromise. D-15 does none of those. It records **what actually came back from a request the skill actually made**. The evidence was always real; the platform discarded it.
+
+> **The replacement test, binding on any future feature that claims this carve-out:**
+>
+> **If the platform change leaves the detector able to stay silent, it is substrate. If it makes the detector unable to stay silent, the vulnerability is being faked.**
+
+AST05 passes it demonstrably, and its acceptance criteria pin the passing rather than asserting it:
+
+- The control skill makes no network call and is untouched (`ast05` A-4).
+- *Task Insights*, *Standup Sync* and *Focus Picker* produce byte-for-byte identical finding sets after D-15 lands (`ast05` A-15, A-10).
+- **An honest fetcher raises nothing** — a skill that reads a rules document and ignores its instruction fields produces zero provenance findings (`ast05` A-7). This is the criterion that distinguishes a detector from a prop.
+
+Two further points close the argument. First, D-15 is **symmetric with a substrate decision the foundation already made unprompted**: §3.1 records payload digests *"even though only AST01 consumes it"*. The foundation built the outbound half before the feature that needed it and left the inbound half unbuilt without ever stating a reason. Second, **faking AST05 would require the opposite change** — having the skill announce its own compromise, which would violate D-12 and I-2 and would rest the evidence on the attacker's word.
+
+**This is a carve-out, not a precedent.** Any fifth vulnerability proposing platform change must argue the replacement test explicitly, in its own spec, and be reviewed on it.
+
+**Control skill.** The false-positive baseline (G5) belongs to the App Foundation feature, but it serves all **four**: every vulnerability feature's acceptance includes "the control skill is still clean." Without it, "the scanner found four things" is unfalsifiable.
 
 ---
 
@@ -694,6 +809,8 @@ Design-level only. The skills themselves are each feature spec's job.
 | D-12 | Host writes markers, not skills | Stronger evidence; keeps the vocabulary clean |
 | D-13 | Ollama unreachable → hard fail, no fallback | A canned fallback is hardcoded routing and would fake SC-1 |
 | D-14 | Reference model `llama3.1:8b`, env-overridable | Needs native tool calling; SC-1's bar needs a named model |
+| **D-15** | **`net.outbound` observations capture the response** — digests, per-item digests and a bounded excerpt (§3.1) | The substrate the provenance axis reads. Corrects an unstated asymmetry: the broker recorded everything outbound and nothing inbound, making "the skill acted on what it fetched" unprovable in principle. Justified against the §12 carve-out test |
+| **D-16** | **Provenance is evaluated per invocation only, never at install** (§4.9) | The instructions are not in the skill. They arrive at run time and can change between two runs of an unchanged skill at an unchanged version — the exact inverse of proportionality, which needs no behaviour at all |
 
 ---
 
@@ -704,7 +821,7 @@ The PRD's deferred questions, closed. These bind every feature spec.
 | Q | Resolution |
 |---|---|
 | **Q-1** | **User-supplied skill upload is deferred out of the current scope.** No upload endpoint, no `data/uploads/`, no `skills/user/` discovery. The registry keeps a multi-root, multi-source internal shape so upload is a later addition, not a redesign |
-| **Q-2** | **Severities fixed:** `AST01 → critical`, `AST04 → high`, `AST03 → medium`, `BROKER_BYPASS → high`, `UNUSED_GRANT → low`. Not per-feature choices |
+| **Q-2** | **Severities fixed:** `AST01 → critical`, `AST04 → high`, `AST03 → medium`, `BROKER_BYPASS → high`, `UNUSED_GRANT → low`. Not per-feature choices. **Extended 2026-08-27 for AST05 only:** `EXTERNAL_INSTRUCTION_FLOW → high`, `AGENT_INSTRUCTION_RELAY → medium`. The five original rows are unchanged. `critical` stays **unique to AST01**, whose vulnerability is the one that moves the crown jewels; remote control of a skill's behaviour is placed at `high` alongside a false declaration, and the relay is underclaimed at `medium` for the purity reason in §4.3 |
 | **Q-3** | **Skill isolation deferred with Q-1.** The cooperative boundary (§3.5) is accepted for catalogue skills, whose safety rests on authorship discipline |
 | **Q-4** | **`POST /api/reset` is in scope.** Clears findings, markers, activity and the collector inbox; clears and re-seeds tasks; **preserves installed state**. Explicitly **not** a security toggle (NG3, I-9) — it cannot make the app less vulnerable, only make it forget what it observed |
 | **Q-5** | **Model `llama3.1:8b`**, overridable by `TASKBOT_MODEL`; native tool-calling required. The **resolved** model is recorded on every finding and activity entry as evidence |

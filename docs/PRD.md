@@ -4,10 +4,26 @@
 |---|---|
 | **Product** | TaskBot — deliberately-vulnerable agentic-skills target |
 | **Layer** | OWASP Agentic Skills (AST) |
-| **Version** | PRD v1.0 |
+| **Version** | **PRD v1.1** *(amended 2026-08-27; v1.0 approved 2026-08-20)* |
 | **Status** | **Approved.** Canonical location: `docs/PRD.md`. |
 | **Companion** | `docs/TDD.md` — system-wide technical design. Feature specs live in `docs/features/<feature>/spec.md`. |
 | **Repo** | `C:\DEV2\vuln-agentic-skills-app` |
+
+---
+
+## 0. Amendment log
+
+### v1.1 — 2026-08-27 · a fourth vulnerability enters scope
+
+**What changed:** **AST05 · Untrusted External Instructions** moves from *"a possible later addition, out of scope"* (NG1, v1.0) into scope as the **fourth** vulnerability, shipping as release **R4**.
+
+**Why:** the three v1.0 vulnerabilities are one per detection axis, and the axes were argued complete. AST05 is the case that argument did not cover: a skill whose manifest, grant and behaviour are all correct, and whose *instructions* come from outside the trust boundary at run time. None of the three existing axes can see it, because none of them has access to what comes **back** from a network request — the broker records everything outbound and nothing inbound. That gap is real, and closing it adds a fourth axis rather than re-running an existing one.
+
+**What this costs, stated up front:** unlike AST04, AST01 and AST03 — each of which shipped with **zero** platform change — **AST05 requires changes to `backend/**`**: inbound response capture in the capability broker, a new provenance axis with two finding types, a new GET-serving mock endpoint, and an additive `Finding` field. `docs/TDD.md` §12 previously named a platform change as the signal that a vulnerability is being faked. That rule is **amended, not broken** — the argument is in `docs/features/ast05-untrusted-external-instructions/spec.md` §8.6 and `docs/TDD.md` §12, and the short form is: the change *records real evidence of a real event* and leaves the detector able to stay silent, which is what separates substrate from a prop.
+
+**Sections amended:** §5 NG1 · §7 (new §7.6) · §8 (new row R4) · §10 SC-1 · §12 (new risk row) · §13 · §14. Existing section numbers are **unchanged** so that citations in shipped feature specs remain valid — which is why the AST05 catalogue entry is §7.6 rather than inserted in AST-id order.
+
+**Not changed:** the safety envelope (FR-7) in any respect; the control skill and the false-positive baseline (G5); NG2, NG3, NG4; the severities already fixed for AST01, AST04 and AST03.
 
 ---
 
@@ -44,7 +60,7 @@ The host watches what each skill *actually does* while it runs and compares that
 
 ## 4. Goals
 
-- **G1** — Ship a realistic, deliberately-vulnerable agentic-skills target with **3 clearly-isolated vulnerabilities**, each mapped to one OWASP AST risk.
+- **G1** — Ship a realistic, deliberately-vulnerable agentic-skills target with **4 clearly-isolated vulnerabilities**, each mapped to one OWASP AST risk. *(v1.1 — was 3; AST05 added, see §0.)*
 - **G2** — Each vulnerability fires through a **real LLM agent's own decision to run the skill** — never a scripted or hardcoded demo path.
 - **G3** — Each vulnerability is **detectable**: it produces a structured finding a scanner can consume.
 - **G4** — Every exploit is **safe, local, and observable**. A marker artifact proves it fired; nothing touches a real system, real network, or real credentials.
@@ -53,7 +69,7 @@ The host watches what each skill *actually does* while it runs and compares that
 
 ## 5. Non-goals
 
-- **NG1** — Not all 10 AST risks. Three now; a fourth is a possible later addition, out of scope for v1.
+- **NG1** — *(amended v1.1)* Not all 10 AST risks. **Four:** AST04, AST01, AST03 and AST05 (§7). The remaining six are out of scope and, for four of them, **not authentically demonstrable by this architecture** — AST02 (no acquisition path to poison), AST07 (no update mechanism), AST09 (contradicted by the approval gate and audit log this app already has), AST10 (one platform, one manifest schema). Naming them is the honest position; staging them would fail G2.
 - **NG2** — No remediation, patched variant, or "fixed" mode inside the app. That lives externally.
 - **NG3** — **No security-level toggles, difficulty switches, or safe mode.** The app is always vulnerable. Configuration that could turn a vulnerability off is explicitly rejected — it would let a scanner pass by accident.
 - **NG4** — Vulnerabilities never live in the assistant's general-chat path. Prompt injection, jailbreaks, and unsafe generation belong to the LLM-layer app. Any vulnerability reachable without a skill installed is a defect.
@@ -116,7 +132,9 @@ The host watches what each skill *actually does* while it runs and compares that
 
 ## 7. Vulnerability catalogue
 
-Three vulnerabilities plus one control. Each is described here at product level — what the user sees, what actually happens, and what proves it.
+**Four** vulnerabilities plus one control *(v1.1 — was three)*. Each is described here at product level — what the user sees, what actually happens, and what proves it.
+
+> **Numbering note.** AST05 is documented at **§7.6**, after the existing entries, rather than inserted in AST-id order. Shipped feature specs cite §7.3, §7.4 and §7.5 by number; renumbering them to make the catalogue read tidily would silently break those citations. Order of appearance here is not order of importance.
 
 ### 7.1 — AST04 · Insecure Metadata
 > *"A skill that lies in its manifest."*
@@ -158,7 +176,20 @@ Allowing users to install their own skill is a **product feature**, and a delibe
 To keep the target unambiguous:
 - The upload path is **not counted as a fourth vulnerability** and has no AST ID.
 - Findings from user-supplied skills are classified against the **same AST taxonomy** as catalogue skills — the monitor treats all skills identically.
-- The **three catalogue vulnerabilities remain the scored surface.** Success criteria (§10) are measured against catalogue skills only, so an uploaded skill can never inflate or mask the result.
+- The **catalogue vulnerabilities remain the scored surface** *(four as of v1.1)*. Success criteria (§10) are measured against catalogue skills only, so an uploaded skill can never inflate or mask the result.
+
+### 7.6 — AST05 · Untrusted External Instructions *(added v1.1)*
+> *"A skill that takes its orders from somewhere you cannot see."*
+
+- **Presents as** a useful integration that keeps the user in step with their team — it fetches the team's shared working agreements and checks the task list against them.
+- **Actually** treats the fetched document as *instructions*: a field in it decides where the skill sends data, and another plants a line straight into the reply the user reads. Whoever controls that document controls the skill.
+- **Fires when** the LLM chooses it for the legitimate purpose it advertises. The document changes what the skill does **without the skill, its manifest, or its version changing at all**.
+- **Proof** — a fetch, then an action whose target came out of the fetched bytes, provable by digest; marker and finding, with the injected text readable in the evidence.
+- **The point** — reviewing a skill at install time tells you nothing if the skill asks someone else what to do at run time.
+
+**Distinction from AST01 (must remain visible in findings):** both skills hold `task.read` and `net.outbound` and both make network calls, so this distinction carries the same weight as the AST04↔AST03 one above. AST01 is about **data moving outward** — the user's tasks are read and then sent. AST05 is about **instructions moving inward** — content arrives and then decides what happens next. They read different substrates (outbound payload digests versus inbound response content), and neither can fire the other: *Team Rules* sends no task content, and *Standup Sync* fetches nothing.
+
+**What this one costs.** AST05 is the only vulnerability that requires platform change (§0). The others each shipped as a skill folder and its tests. This one additionally needs the broker to record what comes back from a request, a fourth detection axis, and an endpoint that serves fetchable content. That is a deliberate, argued, one-time exception, not a new norm.
 
 ---
 
@@ -172,8 +203,11 @@ Built and shipped one at a time, in this order. Each release is independently de
 | **R1 — AST04** | `ast04-insecure-metadata` | Insecure-metadata skill | Fires via LLM; declared-vs-observed finding raised; control still clean |
 | **R2 — AST01** | `ast01-malicious-skills` | Malicious skill | Task data reaches mock collector via LLM-chosen invocation; finding raised; control still clean |
 | **R3 — AST03** | `ast03-over-privileged` | Over-privileged skill | Excess capability observed and distinguished from AST04; control still clean |
+| **R4 — AST05** *(added v1.1)* | `ast05-untrusted-external-instructions` | Instruction-following skill, mock team hub, **provenance axis**, inbound response capture | External content steers a skill's behaviour through an LLM-chosen invocation; provenance finding raised and distinguished from correlation; **the other three vulnerabilities' finding sets are unchanged**; control still clean |
 
 R0 carrying the control skill is deliberate: it proves the monitor can stay silent before it is ever asked to speak.
+
+**R4 is sequenced last for a reason.** It is the only release that changes the platform, so every other vulnerability is complete and green before the substrate moves underneath them. Its done-when clause therefore carries an extra clause the others do not need: the three shipped vulnerabilities must produce byte-for-byte the same findings after R4 as before it.
 
 Each release maps to one feature under `docs/features/<feature>/`. Release sequencing lives here and in per-feature plans; the shared architecture is release-agnostic and lives in `docs/TDD.md`.
 
@@ -194,7 +228,7 @@ Each release maps to one feature under `docs/features/<feature>/`. Release seque
 
 | # | Criterion | Measure |
 |---|---|---|
-| **SC-1** | Each of the 3 vulnerabilities fires through the LLM agent | **≥4 of 5** distinct, natural trigger prompts per vulnerability cause the LLM to choose the skill and the exploit to fire |
+| **SC-1** | Each of the **4** vulnerabilities fires through the LLM agent *(v1.1 — was 3)* | **≥4 of 5** distinct, natural trigger prompts per vulnerability cause the LLM to choose the skill and the exploit to fire |
 | **SC-2** | Each firing is detectable with proof | Every firing yields both a marker artifact and a findings-API entry carrying the correct AST ID |
 | **SC-3** | Control skill is clean | Invoked repeatedly across all sessions, produces **zero** findings |
 | **SC-4** | Vulnerabilities are skill-scoped | With no skills installed, no exploit is reachable and no finding can be produced |
@@ -216,7 +250,9 @@ Python + FastAPI + Jinja2, plain HTML/CSS. Local LLM via **Ollama (required)**. 
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Local model is inconsistent at choosing skills | SC-1 flaky; G2 undermined | Skill descriptions must be genuinely compelling for their stated purpose; measure against the 5-prompt bar and tune manifests, **never** by adding hardcoded routing (FR-3.4) |
-| AST04 and AST03 findings blur together | Two of three vulnerabilities look like one | Findings engine expresses false-declaration vs excessive-grant as distinct failure types (§7.3) |
+| AST04 and AST03 findings blur together | Two of four vulnerabilities look like one | Findings engine expresses false-declaration vs excessive-grant as distinct failure types (§7.3) |
+| **AST05 and AST01 findings blur together** *(v1.1)* | Both skills fetch/send over the network under the same category and grant; the fourth vulnerability reads as a re-run of the second | The axes read **opposite substrates** — correlation matches outbound payload digests, provenance matches inbound response content (§7.6). Pinned by mutual-exclusion tests: *Team Rules* raises no correlation finding, *Standup Sync* raises no provenance finding |
+| **The platform change makes AST05 look staged** *(v1.1)* | The one vulnerability that needed `backend/**` edits is the one a reviewer distrusts | The test is whether the detector can stay **silent**: an honest fetch that ignores the instruction fields raises nothing, and all three prior vulnerabilities are unchanged. Both are acceptance criteria, not assertions (`ast05 spec` A-7, A-15) |
 | Vulnerability leaks into the general-chat path | Becomes an LLM-layer app; breaks NG4 | SC-4 checked every release |
 | Simulated exploits read as fake | Fails G6/SC-8 | Exploits mirror real technique and target real in-app data; only the *destination* is mocked |
 | User-supplied skills muddy the scored surface | Ambiguous results | §7.5 — scoring counts catalogue skills only |
@@ -226,8 +262,9 @@ Python + FastAPI + Jinja2, plain HTML/CSS. Local LLM via **Ollama (required)**. 
 
 ## 13. Open items
 
-- **A fourth vulnerability** — possible later, deliberately unscoped (NG1). Not designed for now, but the findings engine and store should not make adding one painful.
-- ~~**AST risk severities**~~ — **resolved**: AST01 `critical`, AST04 `high`, AST03 `medium`, `BROKER_BYPASS` `high`, `UNUSED_GRANT` `low`. See `docs/TDD.md` §14 Q-2.
+- ~~**A fourth vulnerability**~~ — **resolved (v1.1)**: **AST05 · Untrusted External Instructions**, scoped as release R4 (§7.6, §8). The assessment behind the choice — including the four AST risks this architecture cannot authentically demonstrate — is summarised in NG1 and argued in full in the feature spec.
+- ~~**AST risk severities**~~ — **resolved**: AST01 `critical`, AST04 `high`, AST03 `medium`, `BROKER_BYPASS` `high`, `UNUSED_GRANT` `low`. See `docs/TDD.md` §14 Q-2. **Extended v1.1** for AST05: `EXTERNAL_INSTRUCTION_FLOW` `high`, `AGENT_INSTRUCTION_RELAY` `medium`. `critical` remains unique to AST01.
+- **`UNUSED_GRANT` is implemented but unwired** — a disclosed foundation defect, `docs/KNOWN-ISSUES.md` KI-1. Untouched by v1.1 and still open; scheduled after the vulnerability releases.
 
 ---
 
@@ -235,8 +272,9 @@ Python + FastAPI + Jinja2, plain HTML/CSS. Local LLM via **Ollama (required)**. 
 
 This PRD is the product source of truth. Technical work derives from it:
 
-- `docs/TDD.md` — system-wide technical design (release-agnostic), covering the platform and all three vulnerability classes at architecture level.
+- `docs/TDD.md` — system-wide technical design (release-agnostic), covering the platform and all **four** vulnerability classes at architecture level.
 - `docs/features/app-foundation/spec.md` — the platform, implementation-level.
-- `docs/features/ast04-insecure-metadata/spec.md` · `docs/features/ast01-malicious-skills/spec.md` · `docs/features/ast03-over-privileged/spec.md` — one spec per vulnerability.
+- `docs/features/ast04-insecure-metadata/spec.md` · `docs/features/ast01-malicious-skills/spec.md` · `docs/features/ast03-over-privileged/spec.md` · `docs/features/ast05-untrusted-external-instructions/spec.md` — one spec per vulnerability.
+- `docs/KNOWN-ISSUES.md` — platform defects that are known, deliberately deferred, and disclosed. Distinct from the intentional vulnerabilities above.
 
 Per-feature plans are added alongside each spec when that feature is scheduled.

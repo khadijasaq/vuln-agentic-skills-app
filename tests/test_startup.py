@@ -25,6 +25,10 @@ def test_the_startup_steps_are_in_the_documented_order():
         "install_audit_hook",
         "prepare_data_folder",
         "seed_tasks",
+        # Added with AST05: the mock team hub's document is put in place the same way
+        # the starter tasks are - copied in only if it is not already there, so a
+        # hand-edited document survives a restart.
+        "seed_hub_document",
         "load_policy",
         "discover_skills",
     ]

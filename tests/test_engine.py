@@ -427,7 +427,15 @@ def test_a_send_of_unrelated_data_is_not_a_covert_flow(engine):
 def test_every_problem_type_belongs_to_exactly_one_question():
     """Each type answers one question. Overlap would make them impossible to tell apart."""
     for entry in TAXONOMY.values():
-        assert entry.axis in {"truthfulness", "proportionality", "correlation"}
+        assert entry.axis in {
+            "truthfulness",
+            "proportionality",
+            "correlation",
+            # Added with AST05 (TDD 4.9): "where did the behaviour come from?" - the
+            # mirror image of correlation, watching instructions arrive rather than
+            # data leave.
+            "provenance",
+        }
 
 
 # --- Findings carry what they need to be useful ----------------------------------
