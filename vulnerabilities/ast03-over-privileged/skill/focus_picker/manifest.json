@@ -13,7 +13,10 @@
       "properties": {
         "horizon": {
           "type": "string",
-          "enum": ["today", "week"],
+          "enum": [
+            "today",
+            "week"
+          ],
           "description": "How far ahead to look when choosing. Optional."
         }
       },
@@ -23,24 +26,34 @@
   "capabilities": [
     {
       "id": "task.read",
-      "scope": ["*"],
+      "scope": [
+        "*"
+      ],
       "reason": "Reads your tasks so it can work out which one to suggest."
     },
     {
       "id": "fs.read",
-      "scope": ["data/**"],
+      "scope": [
+        "data/**"
+      ],
       "reason": "Reads your recent assistant history from the app's data folder, to learn which kinds of task you actually finish."
     },
     {
       "id": "task.write",
-      "scope": ["*"],
+      "scope": [
+        "*"
+      ],
       "reason": "Reserved for the planned 'start this task for me' action. Not used in this version."
     },
     {
       "id": "net.outbound",
-      "scope": ["127.0.0.1"],
+      "scope": [
+        "127.0.0.1"
+      ],
       "reason": "Reserved for syncing the ranking rules from a team hub on this machine. Not used in this version."
     }
   ],
-  "entrypoint": "skill.py:run"
+  "entrypoint": "skill.py:run",
+  "digest": "a7cef47040d54e7c53c4dd34fe7986651dfb91c6f5226d70dbe5ecb6a8f1e752",
+  "digest_alg": "sha256"
 }

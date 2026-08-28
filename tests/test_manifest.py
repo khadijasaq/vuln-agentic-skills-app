@@ -59,12 +59,32 @@ def write_skill(folder: Path, manifest: dict, with_code: bool = True) -> Path:
     In: the folder to create, the manifest to write, and whether to also create the
     code file the manifest points at.
     Out: the path of the manifest file.
+
+    Unless the caller already supplied a `digest`, a correct canonical digest is
+    computed over the folder's content (manifest + code) and injected, so every test
+    skill is valid on its own terms and install-time verification (AST02 T-05) passes.
     """
     folder.mkdir(parents=True, exist_ok=True)
-    manifest_path = folder / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     if with_code:
         (folder / "skill.py").write_text("def run(ctx, params):\n    pass\n", encoding="utf-8")
+
+    manifest_path = folder / "manifest.json"
+
+    if "digest" in manifest:
+        # The caller explicitly set the digest (e.g. a test checking digest handling);
+        # respect it and write the folder as given.
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        return manifest_path
+
+    from app.skills.digest import canonical_digest
+
+    # The manifest's own content is bound through its canonical JSON; the raw-byte
+    # resource set is the entrypoint code file.
+    resources = [folder / "skill.py"] if with_code else []
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    digest = canonical_digest(manifest, resources)
+    final = {**manifest, "digest": digest, "digest_alg": "sha256"}
+    manifest_path.write_text(json.dumps(final, indent=2), encoding="utf-8")
     return manifest_path
 
 
@@ -260,6 +280,62 @@ def test_a_bad_entrypoint_format_is_rejected(tmp_path, policy):
 
     assert manifest is None
     assert any("entrypoint" in error for error in errors)
+
+
+# --- The required content digest (AST02 T-04) -------------------------------------
+
+
+def _write_raw(tmp_path: Path, name: str, manifest: dict) -> Path:
+    """Write a skill folder exactly as given, without any digest help."""
+    folder = tmp_path / name
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "manifest.json"
+    path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (folder / "skill.py").write_text("def run(ctx, params):\n    pass\n", encoding="utf-8")
+    return path
+
+
+def test_manifest_requires_valid_digest_field(tmp_path, policy):
+    """A manifest with a well-formed sha256 digest is valid; one without is not."""
+    vocabulary, categories = policy
+    good_digest = "a" * 64
+    with_digest = {**GOOD_MANIFEST, "digest": good_digest, "digest_alg": "sha256"}
+    without_digest = {**GOOD_MANIFEST}
+
+    good_path = _write_raw(tmp_path, "with_digest", with_digest)
+    missing_path = _write_raw(tmp_path, "without_digest", without_digest)
+
+    good, good_errors = parse_manifest(good_path, vocabulary, categories)
+    missing, missing_errors = parse_manifest(missing_path, vocabulary, categories)
+
+    assert good is not None
+    assert good_errors == []
+    assert good.digest == good_digest
+    assert good.digest_alg == "sha256"
+
+    assert missing is None
+    assert any("digest" in error for error in missing_errors)
+
+
+def test_manifest_rejects_malformed_digest(tmp_path, policy):
+    """A digest must be exactly 64 lower-case hex characters."""
+    vocabulary, categories = policy
+    bad_values = [
+        "a" * 63,
+        "A" * 64,
+        "g" * 64,
+        "not a digest",
+        "0" * 65,
+    ]
+
+    for index, bad in enumerate(bad_values):
+        broken = {**GOOD_MANIFEST, "digest": bad}
+        path = _write_raw(tmp_path, f"bad_digest_{index}", broken)
+
+        manifest, errors = parse_manifest(path, vocabulary, categories)
+
+        assert manifest is None, f"{bad!r} should have been rejected"
+        assert any("digest" in error for error in errors)
 
 
 # --- The behaviour that makes fixing manifests bearable --------------------------

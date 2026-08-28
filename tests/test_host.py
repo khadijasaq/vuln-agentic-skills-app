@@ -41,12 +41,21 @@ def make_skill(catalogue: Path, skill_id: str, code: str, manifest_changes: dict
 
     In: where to put it, its identifier, the code to run, and any manifest changes.
     Out: nothing.
+
+    A correct canonical digest is computed over the folder's content and injected, so
+    the skill is valid and passes install-time verification (AST02 T-05/T-06).
     """
     folder = catalogue / skill_id
     folder.mkdir(parents=True, exist_ok=True)
     manifest = {**GOOD_MANIFEST, "id": skill_id, **(manifest_changes or {})}
-    (folder / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     (folder / "skill.py").write_text(code, encoding="utf-8")
+    (folder / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    from app.skills.digest import canonical_digest
+
+    digest = canonical_digest(manifest, [folder / "skill.py"])
+    final = {**manifest, "digest": digest, "digest_alg": "sha256"}
+    (folder / "manifest.json").write_text(json.dumps(final, indent=2), encoding="utf-8")
 
 
 def install_and_get_host(catalogue: Path, skill_id: str) -> SkillHost:

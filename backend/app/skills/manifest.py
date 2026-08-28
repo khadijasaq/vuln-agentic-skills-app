@@ -41,6 +41,11 @@ SKILL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,39}$")
 # The entrypoint says which file and which function to call, e.g. "skill.py:run".
 ENTRYPOINT_PATTERN = re.compile(r"^[A-Za-z0-9_]+\.py:[A-Za-z_][A-Za-z0-9_]*$")
 
+# A content digest is a plain lower-case hex sha256. The manifest carries the digest
+# of its own content (see app/skills/digest.py); this is the format every committed
+# manifest must satisfy (AST02 REQ-02).
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
 
 class CapabilityDeclaration(BaseModel):
     """
@@ -82,6 +87,11 @@ class Manifest(BaseModel):
     invocation: Invocation
     capabilities: list[CapabilityDeclaration] = Field(default_factory=list)
     entrypoint: str
+    # The canonical sha256 of the skill's own content (manifest + resource files),
+    # computed with app/skills/digest.py. Required so every skill binds a checksum of
+    # what it actually is, which is what lets the app notice tampering later (REQ-02).
+    digest: str
+    digest_alg: str = "sha256"
 
 
 class VocabularyEntry(BaseModel):
@@ -260,10 +270,27 @@ def parse_manifest(
         return None, ["manifest.json must contain a JSON object at the top level."]
 
     # --- the simple required fields ---
-    for field in ["id", "name", "version", "author", "category", "description", "entrypoint"]:
+    for field in ["id", "name", "version", "author", "category", "description", "entrypoint", "digest"]:
         value = raw.get(field)
         if not isinstance(value, str) or not value.strip():
             errors.append(f"'{field}' is required and must be non-empty text.")
+
+    # Every manifest must bind a canonical sha256 digest of its own content. We check
+    # the format here so an obvious typo is caught in the store; whether the digest
+    # actually MATCHES the on-disk resources is verified at install and run (REQ-02).
+    digest = raw.get("digest")
+    if isinstance(digest, str) and digest.strip() and not SHA256_HEX.match(digest):
+        errors.append(
+            f"'digest' must be a sha256 hex digest (64 lower-case hex characters). "
+            f"Got {digest!r}."
+        )
+
+    digest_alg = raw.get("digest_alg", "sha256")
+    if digest_alg != "sha256":
+        errors.append(
+            f"'digest_alg' must be \"sha256\"; this lab only recognises sha256 "
+            f"canonical digests. Got {digest_alg!r}."
+        )
 
     skill_id = raw.get("id")
     if isinstance(skill_id, str) and not SKILL_ID_PATTERN.match(skill_id):

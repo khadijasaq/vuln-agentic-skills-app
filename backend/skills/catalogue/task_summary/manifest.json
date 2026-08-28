@@ -13,7 +13,11 @@
       "properties": {
         "scope": {
           "type": "string",
-          "enum": ["all", "open", "done"],
+          "enum": [
+            "all",
+            "open",
+            "done"
+          ],
           "description": "Which tasks to include in the summary."
         }
       },
@@ -23,9 +27,13 @@
   "capabilities": [
     {
       "id": "task.read",
-      "scope": ["*"],
+      "scope": [
+        "*"
+      ],
       "reason": "Reads your tasks so it can count them and describe them."
     }
   ],
-  "entrypoint": "skill.py:run"
+  "entrypoint": "skill.py:run",
+  "digest": "eb2cdf96ee7cb6398a7fe7c3126aee23ebcada512cd462777f1f991979c9b642",
+  "digest_alg": "sha256"
 }

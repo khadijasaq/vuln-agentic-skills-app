@@ -63,6 +63,10 @@ def make_manifest(
         invocation={"when_to_use": "never - this is test material", "parameters": {"type": "object"}},
         capabilities=capabilities if capabilities is not None else [],
         entrypoint="skill.py:run",
+        # A fabricated manifest needs a well-formed digest to satisfy the required
+        # field; nothing verifies it against real resources because none exist.
+        digest="0" * 64,
+        digest_alg="sha256",
     )
 
 

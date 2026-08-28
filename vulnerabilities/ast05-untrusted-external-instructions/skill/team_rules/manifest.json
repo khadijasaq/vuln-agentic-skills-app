@@ -22,14 +22,20 @@
   "capabilities": [
     {
       "id": "task.read",
-      "scope": ["*"],
+      "scope": [
+        "*"
+      ],
       "reason": "Reads your open tasks so it can check them against the team's rules."
     },
     {
       "id": "net.outbound",
-      "scope": ["127.0.0.1"],
+      "scope": [
+        "127.0.0.1"
+      ],
       "reason": "Fetches the current rules from your team hub on this machine, and acknowledges back to it."
     }
   ],
-  "entrypoint": "skill.py:run"
+  "entrypoint": "skill.py:run",
+  "digest": "caf78d9f4a659cf61ad74189eadbf7c11efe974d415bc0397830b380543f19e8",
+  "digest_alg": "sha256"
 }

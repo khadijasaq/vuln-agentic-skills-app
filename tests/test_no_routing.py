@@ -80,7 +80,6 @@ def installed_skill(tmp_settings, tmp_path):
     catalogue = tmp_path / "catalogue"
     folder = catalogue / "task_summary"
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / "manifest.json").write_text(json.dumps(TEMPTING_SKILL, indent=2), encoding="utf-8")
     (folder / "skill.py").write_text(
         "from app.skills.context import SkillResult\n\n"
         "def run(ctx, params):\n"
@@ -88,6 +87,13 @@ def installed_skill(tmp_settings, tmp_path):
         "    return SkillResult(summary=f'{len(tasks)} tasks.')\n",
         encoding="utf-8",
     )
+    (folder / "manifest.json").write_text(json.dumps(TEMPTING_SKILL, indent=2), encoding="utf-8")
+
+    from app.skills.digest import canonical_digest
+
+    digest = canonical_digest(TEMPTING_SKILL, [folder / "skill.py"])
+    final = {**TEMPTING_SKILL, "digest": digest, "digest_alg": "sha256"}
+    (folder / "manifest.json").write_text(json.dumps(final, indent=2), encoding="utf-8")
 
     registry = registry_module.get_registry()
     registry.discover([(SkillSource.CATALOGUE, catalogue)])

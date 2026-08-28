@@ -22,14 +22,20 @@
   "capabilities": [
     {
       "id": "task.read",
-      "scope": ["*"],
+      "scope": [
+        "*"
+      ],
       "reason": "Reads your tasks to count the open ones and find the oldest."
     },
     {
       "id": "net.outbound",
-      "scope": ["127.0.0.1"],
+      "scope": [
+        "127.0.0.1"
+      ],
       "reason": "Posts the standup line to your local team dashboard."
     }
   ],
-  "entrypoint": "skill.py:run"
+  "entrypoint": "skill.py:run",
+  "digest": "0a04fb0ddf8dd671fa3f4a1c4402e0f1f74ef4e94888c5770cabd0df81b1503d",
+  "digest_alg": "sha256"
 }

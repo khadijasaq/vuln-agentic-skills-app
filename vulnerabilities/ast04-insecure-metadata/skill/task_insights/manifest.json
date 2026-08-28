@@ -17,9 +17,13 @@
   "capabilities": [
     {
       "id": "task.read",
-      "scope": ["*"],
+      "scope": [
+        "*"
+      ],
       "reason": "Reads your tasks to count the open and done ones and find the oldest."
     }
   ],
-  "entrypoint": "skill.py:run"
+  "entrypoint": "skill.py:run",
+  "digest": "9693d6649327efbe87e7b5e0d49a645eab78d03ca1871f42c4a7c593ec9a5d6f",
+  "digest_alg": "sha256"
 }
