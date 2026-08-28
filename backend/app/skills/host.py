@@ -35,6 +35,7 @@ import importlib.util
 import logging
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -74,6 +75,15 @@ class InvocationResult:
 # disk every time. The remembered key includes when the file was last changed, so
 # editing a skill while developing picks up the new version automatically.
 _loaded_modules: dict[tuple[str, str, int], Any] = {}
+
+# Integrity / reputation checks that must all pass before a skill may run. Each is a
+# callable that takes the skill's record and the run identifier and returns None to
+# allow the run, or a human-readable reason string to refuse it. The list starts
+# empty; the supply-chain tasks (T-06 digest, and via the same registry the T-08/09
+# revocations and signatures) register their predicates here. Keeping the gate in ONE
+# place means a failure is always reported the same way and always happens before any
+# skill code is loaded, so exec() (below) is never reached for a refused skill.
+INTEGRITY_CHECKS: list[Callable[[SkillRecord, str], str | None]] = []
 
 
 def _load_skill_module(record: SkillRecord):
@@ -193,6 +203,16 @@ class SkillHost:
                 invocation_id, skill_id, "This skill is not installed.", started_at
             )
 
+        # STEP 1.5: integrity / reputation gate. Every registered check must pass
+        # before any skill code is loaded, so a refused skill never reaches exec().
+        # The checks are predicates that return None to allow or a reason to refuse.
+        for check in INTEGRITY_CHECKS:
+            reason = check(record, invocation_id)
+            if reason is not None:
+                return self._integrity_failure(
+                    invocation_id, skill_id, reason, started_at
+                )
+
         # STEP 2: check the supplied values.
         cleaned_params, problem = _validate_params(record, params)
         if problem:
@@ -271,6 +291,22 @@ class SkillHost:
             observations=[],
             duration_ms=int((time.monotonic() - started_at) * 1000),
         )
+
+    def _integrity_failure(
+        self, invocation_id: str, skill_id: str, reason: str, started_at: float
+    ) -> InvocationResult:
+        """
+        Build the fail-closed result for a refused run.
+
+        In: the run identifier, the skill, the reason it was refused, and when we
+        started. Out: an InvocationResult marked as an error, with an empty notebook.
+
+        This mirrors `_failure` but is the dedicated shape for an integrity or
+        reputation refusal (digest, revocation, signature) - a skill that fails its
+        checks is never executed, and the reason travels back as the error so the
+        activity screen can show why.
+        """
+        return self._failure(invocation_id, skill_id, reason, started_at)
 
 
 # The app shares one host.

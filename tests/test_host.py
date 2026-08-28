@@ -351,3 +351,44 @@ def test_a_skill_missing_its_function_is_an_error(tmp_settings, tmp_path):
 
     assert result.outcome == "error"
     assert "run" in result.error
+
+
+# --- The integrity gate -----------------------------------------------------------
+
+
+def test_a_registered_integrity_check_refusal_returns_error_without_running(tmp_settings, tmp_path):
+    """
+    THE FAIL-CLOSED GATE (AST02 T-03).
+
+    Any check on the INTEGRITY_CHECKS list can refuse a run. When one refuses, the
+    skill returns an "error" outcome and the skill's top-level code is never run.
+    """
+    catalogue = tmp_path / "catalogue"
+    marker = tmp_path / "imported.txt"
+    make_skill(
+        catalogue,
+        "guarded_skill",
+        f'''
+from pathlib import Path
+
+def run(ctx, params):
+    Path(r"{marker}").write_text("ran")
+    return None
+''',
+    )
+    host = install_and_get_host(catalogue, "guarded_skill")
+
+    # Register a temporary predicate that always refuses this run.
+    def refuse(record, invocation_id):
+        return "refused by test"
+
+    host_module.INTEGRITY_CHECKS.append(refuse)
+    try:
+        result = host.invoke("guarded_skill", {})
+    finally:
+        host_module.INTEGRITY_CHECKS.remove(refuse)
+
+    assert result.outcome == "error"
+    assert "refused by test" in result.error
+    # The skill's code never ran, so it never wrote its marker.
+    assert not marker.exists()
