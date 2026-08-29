@@ -1,0 +1,73 @@
+# Supply-chain hardening for the vuln-agentic-skills-app lab.
+#
+# This workflow scans the full resolved dependency tree for known vulnerabilities.
+# It is a greenfield addition (this repo had no CI before) and the start of the
+# AST02 supply-chain story (REQ-04, "recursive vulnerability scanning").
+#
+# Every third-party GitHub Action is pinned to an immutable commit SHA so that a
+# swallowed upstream tag cannot silently change what runs here.
+#
+# NOTE: the `pin-check` step below is a DORMANT place-holder. Its real, enforced
+# form will be wired in by AST02 T-13/T-14 (blocked on an open decision about the
+# pinning format). Until then it is disabled so it cannot fail a run it was never
+# meant to run.
+name: supply-chain
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+
+      - name: Resolve the full locked tree
+        # Fail hard if the lockfile has drifted from pyproject.toml: the scan
+        # below is only meaningful against the exact set we actually install.
+        run: uv sync --locked
+
+      - name: Scan the resolved tree for known vulnerabilities
+        # uv audit walks the full recursive resolved dependency set, not just the
+        # top-level pins. Exits non-zero if any known vulnerability is found -
+        # which is what fails this job.
+        run: uv audit
+
+      # -------------------------------------------------------------------
+      # DORMANT place-holder for the pin gate.
+      #
+      # AST02 T-13/T-14 (both BLOCKED on an open decision about the pinning
+      # format) will replace this with a real `pin-check` job that runs
+      # `scripts/check_dependency_pinning.py` and `uv sync --locked` on every
+      # push. Until that decision lands we deliberately leave it inert so a
+      # not-yet-existing gate cannot block commits.
+      # -------------------------------------------------------------------
+      - name: pin-check (dormant - wired up by AST02 T-13/T-14)
+        if: ${{ false }}
+        run: echo "pin-check to be enabled by AST02 T-13/T-14"
+
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+
+      - name: Install the project
+        run: uv sync --locked
+
+      - name: Run the test suite
+        run: uv run pytest
