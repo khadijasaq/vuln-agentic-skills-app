@@ -33,6 +33,7 @@ from app.skills.manifest import (
     load_vocabulary,
     parse_manifest,
 )
+from app.skills.policy_files import load_string_set
 from app.storage import store
 
 logger = logging.getLogger("taskbot.skills")
@@ -90,6 +91,7 @@ class SkillRegistry:
         self._records: dict[str, SkillRecord] = {}
         self._vocabulary: Vocabulary | None = None
         self._categories: set[str] = set()
+        self._allowlist: set[str] = set()
 
     # --- loading the policy files ---
 
@@ -100,7 +102,8 @@ class SkillRegistry:
         In: nothing. Out: the vocabulary and the set of known category names.
 
         These are cached after the first load because they never change while the
-        app is running.
+        app is running. The skill allowlist (REQ-06) is loaded at the same time and
+        cached with them.
         """
         if self._vocabulary is None:
             settings = get_settings()
@@ -113,7 +116,32 @@ class SkillRegistry:
             self._categories = load_category_names(
                 settings.policy_dir / "capability_baselines.json"
             )
+            # The set of skill ids this deployment is willing to accept. Optional:
+            # a missing or empty file means "no allowlist", so nothing is refused by
+            # it. Once populated, only skills on the list may be installed (REQ-06).
+            self._allowlist = load_string_set(
+                settings, "skill_allowlist.json", fallback=()
+            )
         return self._vocabulary, self._categories
+
+    def _in_managed_channel(self, folder: Path) -> bool:
+        """
+        True if a skill folder lives inside one of the app's own skill directories.
+
+        In: a skill folder. Out: whether it is part of the real, configured skill
+        channel (the shipped catalogue or a weakness folder) rather than a synthetic
+        catalogue a test (or some other ad-hoc source) constructed elsewhere.
+
+        The allowlist only gates the app's real skill channel - the directories the
+        running app actually discovers and where a stray/typosquat file could land
+        (REQ-06). Arbitrary derived catalogues are left alone.
+        """
+        settings = get_settings()
+        folder = folder.resolve()
+        for root in (settings.skills_dir, settings.vulnerabilities_dir):
+            if folder.is_relative_to(root.resolve()):
+                return True
+        return False
 
     # --- finding skills ---
 
@@ -245,6 +273,16 @@ class SkillRegistry:
                 f"Another skill already uses the id {skill_id!r}; this copy is ignored."
             ]
             manifest = None
+
+        # Enforce the skill allowlist (REQ-06): a skill discovered from the app's own
+        # skill directories whose id is not approved is marked invalid, so it can
+        # never be installed or shown to the AI model.
+        if manifest is not None and self._in_managed_channel(folder):
+            if manifest.id not in self._allowlist:
+                errors = list(errors) + [
+                    f"Skill {manifest.id!r} is not on the allowed skills list; "
+                    f"it is refused."
+                ]
 
         valid = manifest is not None and not errors
 

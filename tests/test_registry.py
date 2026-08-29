@@ -11,11 +11,13 @@ decision S-18; requirements FR-2.1, FR-2.2, FR-2.6.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
 import pytest
 
+from app import config
 from app.skills import registry as registry_module
 from app.skills.registry import SkillInvalid, SkillNotFound, SkillRegistry, SkillSource
 from app.storage import store
@@ -268,6 +270,67 @@ def test_uninstalling_drops_the_recorded_digest(tmp_settings, catalogue):
     registry.uninstall("example_skill")
 
     assert "example_skill" not in store.load_installed_digests()
+
+
+# --- The skill allowlist (AST02 T-07, REQ-06) --------------------------------------
+
+
+def _managed_registry(tmp_settings, tmp_path, skill_id: str, manifest: dict) -> SkillRegistry:
+    """
+    Point the app at a scratch skills channel holding one skill, with the REAL policy
+    folder (so the real allowlist applies), and return a registry that has looked
+    there. The skill is therefore "in the managed channel" the allowlist gates.
+    """
+    channel = tmp_path / "skills" / "catalogue"
+    write_skill(channel / skill_id, manifest)
+
+    scratch = dataclasses.replace(
+        tmp_settings,
+        skills_dir=tmp_path / "skills",
+        vulnerabilities_dir=tmp_path / "no-vulns",
+    )
+    config.set_settings(scratch)
+    registry_module.reset_registry()
+
+    registry = SkillRegistry()
+    registry.discover_default()
+    return registry
+
+
+def test_skill_absent_from_allowlist_is_invalid(tmp_settings, tmp_path):
+    """
+    REQ-06: a skill discovered from the app's own skill channel whose id is not on
+    the allowlist is invalid, so it can never be installed or shown to the model -
+    even though it is a perfectly well-formed skill on disk.
+    """
+    registry = _managed_registry(
+        tmp_settings, tmp_path, "rogue_skill", {**GOOD_MANIFEST, "id": "rogue_skill"}
+    )
+
+    record = registry.get("rogue_skill")
+
+    assert record.valid is False
+    assert any("allowed skills list" in error for error in record.errors)
+    assert "rogue_skill" not in [item.skill_id for item in registry.installed()]
+
+
+def test_skill_in_allowlist_requires_valid_digest(tmp_settings, tmp_path):
+    """
+    REQ-06 + REQ-02: being on the allowlist is necessary but not sufficient - the
+    skill must still carry a valid content digest. An allowlisted skill with a broken
+    digest is still invalid.
+    """
+    registry = _managed_registry(
+        tmp_settings,
+        tmp_path,
+        "task_summary",
+        {**GOOD_MANIFEST, "id": "task_summary", "digest": "not-a-digest"},
+    )
+
+    record = registry.get("task_summary")
+
+    assert record.valid is False
+    assert any("digest" in error for error in record.errors)
 
 
 # --- What the AI model is allowed to see -----------------------------------------
