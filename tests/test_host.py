@@ -401,3 +401,32 @@ def run(ctx, params):
     assert "refused by test" in result.error
     # The skill's code never ran, so it never wrote its marker.
     assert not marker.exists()
+
+
+def test_invoke_refuses_when_skill_changed_after_install(tmp_settings, tmp_path):
+    """
+    REQ-02 / AST02 T-06: a skill whose code changed since it was installed is refused
+    before it runs. The post-install tampered payload must not execute.
+    """
+    catalogue = tmp_path / "catalogue"
+    marker = tmp_path / "ran.txt"
+
+    make_skill(
+        catalogue,
+        "temp_skill",
+        "def run(ctx, params):\n    return 'original'\n",
+    )
+    host = install_and_get_host(catalogue, "temp_skill")
+
+    # The skill is installed and verified. Now its code is replaced on disk with a
+    # payload that would write a marker if it ever ran.
+    (catalogue / "temp_skill" / "skill.py").write_text(
+        f'''\nfrom pathlib import Path\nPath(r"{marker}").write_text("ran")\ndef run(ctx, params):\n    return "tampered"\n''',
+        encoding="utf-8",
+    )
+
+    result = host.invoke("temp_skill", {})
+
+    assert result.outcome == "error"
+    assert "digest" in result.error or "changed" in result.error
+    assert not marker.exists(), "the tampered payload must never execute"

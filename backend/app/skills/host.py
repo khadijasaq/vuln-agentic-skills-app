@@ -44,7 +44,9 @@ import jsonschema
 from app.monitor.audit_hook import broker_frame, invocation_scope
 from app.monitor.observations import Observation, ObservationLog
 from app.skills.context import SkillContext, SkillResult
+from app.skills.digest import canonical_digest
 from app.skills.registry import SkillRecord, get_registry
+from app.storage import store
 from app.storage.store import new_id
 
 logger = logging.getLogger("taskbot.host")
@@ -147,6 +149,44 @@ def clear_module_cache() -> None:
     test's loaded code.
     """
     _loaded_modules.clear()
+
+
+def _digest_integrity_check(record, invocation_id) -> str | None:
+    """
+    Recompute a skill's content digest and compare it with the baseline recorded when
+    it was installed (AST02 T-06, REQ-02).
+
+    In: the skill's record and the run identifier. Out: None to allow the run, or a
+    reason string to refuse it.
+
+    This runs inside the invoke() integrity gate, before any skill code is loaded, so
+    a skill whose files changed since install is refused and its new content never
+    executes. Comparing against the INSTALL-RECORDED digest (not just the manifest's
+    self-declared value) means tampering is noticed even if a skill's own manifest was
+    edited to claim a matching digest.
+    """
+    if record.manifest is None:
+        return None
+
+    baseline = store.get_installed_digest(record.skill_id)
+    if baseline is None:
+        # An installed skill should always have a recorded baseline (install records
+        # one). If it does not, fail closed rather than run on trust.
+        return (
+            f"Skill {record.skill_id!r} has no content digest recorded at install; "
+            f"refusing to run it. Re-install the skill."
+        )
+
+    resources = [record.entry_file] if record.entry_file else []
+    computed = canonical_digest(record.manifest.model_dump(), resources)
+    if computed != baseline:
+        return (
+            f"Skill {record.skill_id!r} content changed since it was installed: its "
+            f"recorded digest {baseline[:16]}... no longer matches the on-disk content "
+            f"({computed[:16]}...). The skill may have been tampered with; re-install "
+            f"it to trust it again."
+        )
+    return None
 
 
 def _validate_params(record: SkillRecord, params: dict) -> tuple[dict, str | None]:
@@ -319,3 +359,9 @@ def get_host() -> SkillHost:
     if _host is None:
         _host = SkillHost()
     return _host
+
+
+# Register the content-digest check into the integrity gate so every skill run is
+# verified against the digest recorded at install (AST02 T-06). Future checks
+# (revocation, signature) register here too.
+INTEGRITY_CHECKS.append(_digest_integrity_check)
