@@ -232,7 +232,7 @@ def test_a_failed_request_is_never_retried(tmp_settings, restore_httpx):
 
 def test_health_reports_a_running_model(tmp_settings, restore_httpx):
     def handler(request):
-        return httpx.Response(200, json={"models": [{"name": "llama3.1:8b"}]})
+        return httpx.Response(200, json={"models": [{"name": tmp_settings.model}]})
 
     client = client_with_pretend_server(handler, tmp_settings)
     health = client.health()

@@ -18,6 +18,24 @@ import pytest
 
 from app import config
 
+# REQ-07: the pinned model digest (llama3.1:8b image). Matches config.py default.
+DEFAULT_MODEL_DIGEST = (
+    "sha256:667b0c1932bc6ffc593ed1d03f895bf2dc8dc6df21db3042284a6f4416b06a29"
+)
+
+
+def test_default_model_is_digest_reference(monkeypatch):
+    """The default Settings.model is a sha256: digest reference, not a mutable tag."""
+    monkeypatch.delenv("TASKBOT_MODEL", raising=False)
+
+    model = config.load_settings().model
+
+    assert model == DEFAULT_MODEL_DIGEST
+    assert model.startswith("sha256:")
+    rest = model[len("sha256:"):]
+    assert len(rest) == 64
+    assert all(c in "0123456789abcdef" for c in rest)
+
 
 def test_defaults_are_the_documented_ones(monkeypatch):
     """With no environment variables set, every dial falls back to its documented default."""
@@ -36,7 +54,7 @@ def test_defaults_are_the_documented_ones(monkeypatch):
 
     settings = config.load_settings()
 
-    assert settings.model == "llama3.1:8b"
+    assert settings.model == DEFAULT_MODEL_DIGEST
     assert settings.ollama_url == "http://127.0.0.1:11434"
     assert settings.host == "127.0.0.1"
     assert settings.port == 8000
@@ -134,4 +152,4 @@ def test_settings_are_shared_and_resettable():
 def test_blank_environment_variable_is_treated_as_unset(monkeypatch):
     """An empty value is almost always a mistake, so we fall back to the default."""
     monkeypatch.setenv("TASKBOT_MODEL", "   ")
-    assert config.load_settings().model == "llama3.1:8b"
+    assert config.load_settings().model == DEFAULT_MODEL_DIGEST

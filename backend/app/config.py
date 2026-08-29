@@ -181,7 +181,10 @@ def load_settings() -> Settings:
     ).resolve()
 
     return Settings(
-        model=_read_text("TASKBOT_MODEL", "llama3.1:8b"),
+        model=_read_text(
+            "TASKBOT_MODEL",
+            "sha256:667b0c1932bc6ffc593ed1d03f895bf2dc8dc6df21db3042284a6f4416b06a29",
+        ),
         ollama_url=_read_text("TASKBOT_OLLAMA_URL", "http://127.0.0.1:11434"),
         host=host,
         port=_read_int("TASKBOT_PORT", 8000),

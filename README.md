@@ -52,7 +52,7 @@ calling.
 
 ```bash
 ollama serve
-ollama pull llama3.1:8b
+ollama pull sha256:667b0c1932bc6ffc593ed1d03f895bf2dc8dc6df21db3042284a6f4416b06a29
 
 uv sync
 uv run uvicorn --app-dir backend app.main:app --host 127.0.0.1 --port 8000
@@ -72,10 +72,20 @@ model resident for 30 minutes, so only the first message pays that cost. The tim
 is 300 seconds — generous on purpose, because reporting a healthy-but-slow model as
 broken sends you debugging the wrong thing.
 
-The model must support **native tool calling**. `llama3.1:8b` does. Tested and found
+The model must support **native tool calling**. The default reference,
+`sha256:667b0c1932bc6ffc593ed1d03f895bf2dc8dc6df21db3042284a6f4416b06a29`
+(the `llama3.1:8b` image), does. Its identity is pinned by content digest, so pulling by
+tag is not required. Tested and found
 wanting: `mistral:latest` narrates what it would do without ever calling anything, and
 `qwen2.5-coder:3b` writes the tool call as plain text in its reply. With either of
 those, no skill ever runs and the app looks broken when it is not.
+
+The digest in the block above is the content digest of the referenced image. To re-pin a
+different model, resolve its digest (`ollama show <model> --modelfile`, then use the
+`sha256-...` blob name as `sha256:...`), tag that image with the digest as its model name
+(`ollama cp <model> sha256:<digest>` — Ollama serves a model by that exact name, which is
+how `TASKBOT_MODEL` resolves it at runtime), update the `ollama pull` above, the
+`TASKBOT_MODEL` default in `backend/app/config.py`, and this note.
 
 ## The screens
 
@@ -129,7 +139,7 @@ route, that makes it less vulnerable.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `TASKBOT_MODEL` | `llama3.1:8b` | Which Ollama model to use (must support tool calling) |
+| `TASKBOT_MODEL` | `sha256:667b0c1932bc6ffc593ed1d03f895bf2dc8dc6df21db3042284a6f4416b06a29` | Which Ollama model to use (digest reference; must support tool calling) |
 | `TASKBOT_OLLAMA_URL` | `http://127.0.0.1:11434` | Where Ollama is |
 | `TASKBOT_HOST` | `127.0.0.1` | **Loopback only — the app refuses to start otherwise** |
 | `TASKBOT_PORT` | `8000` | Which port |
