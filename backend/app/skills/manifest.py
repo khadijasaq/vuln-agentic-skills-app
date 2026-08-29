@@ -33,6 +33,8 @@ from typing import Any
 import jsonschema
 from pydantic import BaseModel, Field
 
+from app.skills import signing
+
 # A skill identifier must be lowercase letters, digits and underscores, starting
 # with a letter, three to forty characters. It doubles as the name the AI model uses
 # to ask for the skill, so it has to be simple and predictable.
@@ -45,6 +47,12 @@ ENTRYPOINT_PATTERN = re.compile(r"^[A-Za-z0-9_]+\.py:[A-Za-z_][A-Za-z0-9_]*$")
 # of its own content (see app/skills/digest.py); this is the format every committed
 # manifest must satisfy (AST02 REQ-02).
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+# An Ed25519 signature is 64 bytes = 128 hex characters. A public key is 32 bytes =
+# 64 hex characters. Both are provenance records about the skill, not content, so
+# they are excluded from the canonical digest (see app/skills/digest.py).
+SIGNATURE_HEX = re.compile(r"^[0-9a-f]{128}$")
+PUBLIC_KEY_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 class CapabilityDeclaration(BaseModel):
@@ -92,6 +100,10 @@ class Manifest(BaseModel):
     # what it actually is, which is what lets the app notice tampering later (REQ-02).
     digest: str
     digest_alg: str = "sha256"
+    # An optional Ed25519 signature (128 hex chars) binding the digest to a signing
+    # key, and the id of that key (REQ-09). Excluded from the canonical digest.
+    signature: str | None = None
+    sign_public_key_id: str | None = None
 
 
 class VocabularyEntry(BaseModel):
@@ -238,14 +250,18 @@ def parse_manifest(
     path: Path,
     vocabulary: Vocabulary,
     categories: set[str],
+    trusted_keys: dict[str, str] | None = None,
 ) -> tuple[Manifest | None, list[str]]:
     """
     Read and check one skill's description file.
 
     In:
-      path       - the manifest.json file;
-      vocabulary - the shared capability list;
-      categories - the category names the baselines file knows about.
+      path         - the manifest.json file;
+      vocabulary   - the shared capability list;
+      categories   - the category names the baselines file knows about;
+      trusted_keys - the map of key id -> public key the deployment trusts
+                     (REQ-09). Optional; when supplied, a signature claimed by one
+                     of those trusted keys is verified.
     Out: a pair - the parsed Manifest (or None if it failed), and a list of every
     problem found.
 
@@ -255,6 +271,7 @@ def parse_manifest(
     """
     errors: list[str] = []
     path = Path(path)
+    trusted_keys = trusted_keys or {}
 
     if not path.exists():
         return None, [f"No manifest.json found at {path}."]
@@ -291,6 +308,48 @@ def parse_manifest(
             f"'digest_alg' must be \"sha256\"; this lab only recognises sha256 "
             f"canonical digests. Got {digest_alg!r}."
         )
+
+    # --- optional provenance: a signature over the digest (REQ-09) ---
+    signature = raw.get("signature")
+    sign_public_key_id = raw.get("sign_public_key_id")
+
+    if signature is not None and (
+        not isinstance(signature, str) or not SIGNATURE_HEX.match(signature)
+    ):
+        errors.append(
+            f"'signature' must be a 64-byte Ed25519 signature as 128 hex "
+            f"characters. Got {signature!r}."
+        )
+
+    if sign_public_key_id is not None and (
+        not isinstance(sign_public_key_id, str) or not sign_public_key_id.strip()
+    ):
+        errors.append("'sign_public_key_id' must be non-empty text.")
+
+    # A signature is only ever checked when its claimed key is one the deployment
+    # actually trusts (a key it has in trusted_keys.json). An unsigned skill - or a
+    # skill signed by a key nobody trusts - gets no benefit from the claim and is not
+    # marked invalid for it. But a signature attributed to a TRUSTED key is required
+    # to hold up, or the skill is refused.
+    public_key = None
+    if isinstance(sign_public_key_id, str) and sign_public_key_id in trusted_keys:
+        public_key = trusted_keys[sign_public_key_id]
+
+    if public_key is not None:
+        if signature is None:
+            errors.append(
+                f"Skill claims to be signed with trusted key "
+                f"{sign_public_key_id!r} but carries no 'signature'."
+            )
+        elif isinstance(signature, str) and SIGNATURE_HEX.match(signature):
+            if isinstance(digest, str) and SHA256_HEX.match(digest):
+                if not signing.verify_signature(public_key, signature, digest):
+                    errors.append(
+                        f"'signature' does not verify against trusted key "
+                        f"{sign_public_key_id!r} for digest {digest[:16]}...; "
+                        f"the skill may have been altered or signed by a key that "
+                        f"is not the one it claims."
+                    )
 
     skill_id = raw.get("id")
     if isinstance(skill_id, str) and not SKILL_ID_PATTERN.match(skill_id):

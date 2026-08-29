@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from app.skills import signing
 from app.skills.manifest import load_category_names, load_vocabulary, parse_manifest
 
 
@@ -378,3 +379,79 @@ def test_checking_a_manifest_never_raises(tmp_path, policy):
         manifest, errors = parse_manifest(folder / "manifest.json", vocabulary, categories)
         assert manifest is None
         assert errors
+
+# --- Signatures over the digest (AST02 T-09, REQ-09) ------------------------------
+
+
+def _write_signed(tmp_path, manifest, *, seed_hex, key_id, **extra) -> Path:
+    """Write a skill folder, then sign its (auto-injected) digest and add the fields."""
+    folder = tmp_path / manifest["id"]
+    manifest_path = write_skill(folder, manifest)
+    raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    raw["signature"] = signing.sign_digest(seed_hex, raw["digest"])
+    raw["sign_public_key_id"] = key_id
+    raw.update(extra)
+    manifest_path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+    return manifest_path
+
+
+def test_key_signed_skill_is_valid(tmp_path, policy):
+    """A skill signed by a key the deployment trusts is accepted."""
+    seed = signing.new_private_seed_hex()
+    key_id = "lab-signing-key"
+    vocabulary, categories = policy
+    manifest = {**GOOD_MANIFEST, "id": "signed_skill"}
+    path = _write_signed(tmp_path, manifest, seed_hex=seed, key_id=key_id)
+    trusted = {key_id: signing.public_key_hex(seed)}
+
+    parsed, errors = parse_manifest(
+        path, vocabulary, categories, trusted_keys=trusted
+    )
+
+    assert errors == []
+    assert parsed is not None
+    assert parsed.sign_public_key_id == key_id
+
+
+def test_key_signed_skill_with_wrong_key_is_invalid(tmp_path, policy):
+    """
+    A signature attributed to a trusted key that does not actually verify (signed
+    by a different key) makes the skill invalid.
+    """
+    signer_seed = signing.new_private_seed_hex()
+    other_seed = signing.new_private_seed_hex()
+    key_id = "lab-signing-key"
+    vocabulary, categories = policy
+    manifest = {**GOOD_MANIFEST, "id": "signed_skill"}
+    path = _write_signed(tmp_path, manifest, seed_hex=signer_seed, key_id=key_id)
+    trusted = {key_id: signing.public_key_hex(other_seed)}
+
+    parsed, errors = parse_manifest(
+        path, vocabulary, categories, trusted_keys=trusted
+    )
+
+    assert parsed is None
+    assert any("does not verify" in error for error in errors)
+
+
+def test_unsigned_skill_with_trusted_key_id_is_invalid(tmp_path, policy):
+    """
+    Claiming a trusted key without actually carrying a valid signature is refused:
+    a trusted-key claim has to be backed up.
+    """
+    seed = signing.new_private_seed_hex()
+    key_id = "lab-signing-key"
+    vocabulary, categories = policy
+    manifest = {**GOOD_MANIFEST, "id": "signed_skill"}
+    path = _write_signed(tmp_path, manifest, seed_hex=seed, key_id=key_id)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    del raw["signature"]
+    path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+    trusted = {key_id: signing.public_key_hex(seed)}
+
+    parsed, errors = parse_manifest(
+        path, vocabulary, categories, trusted_keys=trusted
+    )
+
+    assert parsed is None
+    assert any("carries no 'signature'" in error for error in errors)

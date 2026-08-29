@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.7",
     "jsonschema>=4.22",
     "python-multipart>=0.0.9",
+    "cryptography>=42",
 ]
 
 [dependency-groups]

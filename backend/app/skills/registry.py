@@ -33,7 +33,7 @@ from app.skills.manifest import (
     load_vocabulary,
     parse_manifest,
 )
-from app.skills.policy_files import load_string_set
+from app.skills.policy_files import load_key_set, load_string_set
 from app.storage import store
 
 logger = logging.getLogger("taskbot.skills")
@@ -94,6 +94,7 @@ class SkillRegistry:
         self._allowlist: set[str] = set()
         self._revoked_digests: set[str] = set()
         self._revoked_publishers: set[str] = set()
+        self._trusted_keys: dict[str, str] = {}
 
     # --- loading the policy files ---
 
@@ -133,6 +134,10 @@ class SkillRegistry:
             self._revoked_publishers = load_string_set(
                 settings, "revocations.json", field="publishers", fallback=()
             )
+            # The map of key id -> public key this deployment trusts for signature
+            # verification (REQ-09). Empty by default; when a key is present, a skill
+            # claiming that key must carry a valid signature (checked at discovery).
+            self._trusted_keys = load_key_set(settings, "trusted_keys.json")
         return self._vocabulary, self._categories
 
     def _in_managed_channel(self, folder: Path) -> bool:
@@ -260,7 +265,9 @@ class SkillRegistry:
         Out: one SkillRecord, valid or invalid.
         """
         manifest_path = folder / "manifest.json"
-        manifest, errors = parse_manifest(manifest_path, vocabulary, categories)
+        manifest, errors = parse_manifest(
+            manifest_path, vocabulary, categories, trusted_keys=self._trusted_keys
+        )
 
         # If the manifest could not be read we still record the skill, using the
         # folder name as a stand-in identifier so the store can list the problem.
