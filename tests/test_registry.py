@@ -221,6 +221,55 @@ def test_installing_an_unknown_skill_is_a_clear_error(tmp_settings, catalogue):
         registry.install("no_such_skill")
 
 
+# --- Content-digest verification at install (AST02 T-05) ---------------------------
+
+
+def test_install_fails_when_manifest_digest_mismatch(tmp_settings, catalogue):
+    """
+    REQ-02: a skill whose on-disk content no longer matches the digest its manifest
+    declares cannot be installed. This is how a tampered skill is refused at install.
+    """
+    write_skill(catalogue / "example_skill", GOOD_MANIFEST)
+    # Tamper with the code AFTER the manifest's digest was computed over it.
+    (catalogue / "example_skill" / "skill.py").write_text(
+        "def run(ctx, params):\n    return 'tampered'\n", encoding="utf-8"
+    )
+    registry = discover_from(catalogue)
+
+    with pytest.raises(SkillInvalid) as exc_info:
+        registry.install("example_skill")
+
+    assert "digest" in str(exc_info.value)
+    assert store.load_installed().installed == []
+
+
+def test_install_records_verified_digest(tmp_settings, catalogue):
+    """
+    REQ-02: a successfully installed skill has its verified content digest recorded as
+    the trusted baseline, for later run-time comparison (AST02 T-06).
+    """
+    write_skill(catalogue / "example_skill", GOOD_MANIFEST)
+    registry = discover_from(catalogue)
+    declared = registry.get("example_skill").manifest.digest
+
+    registry.install("example_skill")
+
+    assert store.load_installed_digests()["example_skill"] == declared
+    assert store.get_installed_digest("example_skill") == declared
+
+
+def test_uninstalling_drops_the_recorded_digest(tmp_settings, catalogue):
+    """Uninstalling a skill forgets its verified digest, so a re-install re-verifies."""
+    write_skill(catalogue / "example_skill", GOOD_MANIFEST)
+    registry = discover_from(catalogue)
+    registry.install("example_skill")
+    assert "example_skill" in store.load_installed_digests()
+
+    registry.uninstall("example_skill")
+
+    assert "example_skill" not in store.load_installed_digests()
+
+
 # --- What the AI model is allowed to see -----------------------------------------
 
 

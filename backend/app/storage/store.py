@@ -253,6 +253,58 @@ def is_installed(skill_id: str) -> bool:
     return skill_id in load_installed().installed
 
 
+# --- Installed content digests ---------------------------------------------------
+
+
+def _installed_digests_path() -> Path:
+    """Where the verified per-skill content digests are kept."""
+    return get_settings().data_dir / "installed_digests.json"
+
+
+def load_installed_digests() -> dict[str, str]:
+    """
+    Read the verified content digest recorded for each installed skill.
+
+    In: nothing. Out: a dict of skill id -> canonical digest.
+
+    This is the trusted baseline an installed skill was verified against at install
+    time. The manifest's own 'digest' field is what a skill *claims*; this store is
+    what the app *recorded after checking*. Run-time verification (AST02 T-06)
+    compares the on-disk content against THIS, so a tampered skill can be detected
+    even if its manifest was edited to claim a matching digest.
+    """
+    raw = atomic.read_json(_installed_digests_path(), default={})
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): str(value) for key, value in raw.items() if isinstance(value, str) and value}
+
+
+def get_installed_digest(skill_id: str) -> str | None:
+    """The verified digest recorded for one skill, or None if not installed."""
+    return load_installed_digests().get(skill_id)
+
+
+def set_installed_digest(skill_id: str, digest: str) -> None:
+    """
+    Record the canonical digest that an installed skill was verified against.
+
+    In: the skill identifier and the verified digest. Out: nothing.
+    """
+    with atomic.mutate_json(_installed_digests_path(), default={}) as digests:
+        digests[skill_id] = digest
+
+
+def remove_installed_digest(skill_id: str) -> None:
+    """
+    Forget the verified digest for a skill (used when it is uninstalled).
+
+    In: the skill identifier. Out: nothing. Doing it for a skill with no recorded
+    digest is harmless.
+    """
+    with atomic.mutate_json(_installed_digests_path(), default={}) as digests:
+        digests.pop(skill_id, None)
+
+
 # --- Activity log ----------------------------------------------------------------
 
 

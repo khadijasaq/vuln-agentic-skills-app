@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Sequence
 
 from app.config import get_settings
+from app.skills.digest import canonical_digest
 from app.skills.manifest import (
     Manifest,
     Vocabulary,
@@ -335,6 +336,24 @@ class SkillRegistry:
                 f"problems: {'; '.join(record.errors)}"
             )
 
+        # Verify the skill's content against the digest its manifest declares (REQ-02).
+        # The manifest object is bound through its canonical JSON; the raw-byte resource
+        # set is the entrypoint file. If the on-disk content has been altered since the
+        # manifest was written, the hashes differ and installation is refused.
+        if record.manifest is not None:
+            resources = [record.entry_file] if record.entry_file else []
+            computed = canonical_digest(record.manifest.model_dump(), resources)
+            if computed != record.manifest.digest:
+                raise SkillInvalid(
+                    f"Skill {skill_id!r} cannot be installed because its content does "
+                    f"not match the digest in its manifest: the manifest declares "
+                    f"{record.manifest.digest} but the on-disk content hashes to "
+                    f"{computed}. Its files may have been tampered with after it was "
+                    f"vetted; re-verify before trusting it."
+                )
+            # Record the verified digest as the trusted baseline for run-time checks.
+            store.set_installed_digest(skill_id, computed)
+
         store.set_installed(skill_id, True)
         return self._refresh_installed_flag(record)
 
@@ -346,6 +365,7 @@ class SkillRegistry:
         """
         record = self.get(skill_id)
         store.set_installed(skill_id, False)
+        store.remove_installed_digest(skill_id)
         return self._refresh_installed_flag(record)
 
 
