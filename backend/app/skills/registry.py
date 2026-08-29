@@ -92,6 +92,8 @@ class SkillRegistry:
         self._vocabulary: Vocabulary | None = None
         self._categories: set[str] = set()
         self._allowlist: set[str] = set()
+        self._revoked_digests: set[str] = set()
+        self._revoked_publishers: set[str] = set()
 
     # --- loading the policy files ---
 
@@ -121,6 +123,15 @@ class SkillRegistry:
             # it. Once populated, only skills on the list may be installed (REQ-06).
             self._allowlist = load_string_set(
                 settings, "skill_allowlist.json", fallback=()
+            )
+            # Revocation lists (REQ-08): content digests and publisher names that are
+            # no longer trusted. Empty by default; populated only when a skill is
+            # recalled.
+            self._revoked_digests = load_string_set(
+                settings, "revocations.json", field="digests", fallback=()
+            )
+            self._revoked_publishers = load_string_set(
+                settings, "revocations.json", field="publishers", fallback=()
             )
         return self._vocabulary, self._categories
 
@@ -284,6 +295,21 @@ class SkillRegistry:
                     f"it is refused."
                 ]
 
+        # Enforce revocation (REQ-08): a skill whose content digest or publisher is
+        # revoked is marked invalid no matter where it lives, so it cannot be
+        # installed or run even if it was previously trusted.
+        if manifest is not None:
+            if manifest.digest in self._revoked_digests:
+                errors = list(errors) + [
+                    f"Skill {manifest.id!r} content (digest {manifest.digest[:16]}...) "
+                    f"has been revoked."
+                ]
+            if manifest.author in self._revoked_publishers:
+                errors = list(errors) + [
+                    f"Skill {manifest.id!r} is published by {manifest.author!r}, "
+                    f"which has been revoked."
+                ]
+
         valid = manifest is not None and not errors
 
         return SkillRecord(
@@ -373,6 +399,21 @@ class SkillRegistry:
                 f"Skill {skill_id!r} cannot be installed because its manifest has "
                 f"problems: {'; '.join(record.errors)}"
             )
+
+        # Re-check revocation at install time as well (REQ-08). A skill was already
+        # refused at discovery if it was revoked then, but this guards the case where
+        # a revocation is issued after a skill was discovered but before it is added.
+        if record.manifest is not None:
+            if record.manifest.digest in self._revoked_digests:
+                raise SkillInvalid(
+                    f"Skill {skill_id!r} cannot be installed because its content "
+                    f"has been revoked."
+                )
+            if record.manifest.author in self._revoked_publishers:
+                raise SkillInvalid(
+                    f"Skill {skill_id!r} cannot be installed because its publisher "
+                    f"{record.manifest.author!r} has been revoked."
+                )
 
         # Verify the skill's content against the digest its manifest declares (REQ-02).
         # The manifest object is bound through its canonical JSON; the raw-byte resource

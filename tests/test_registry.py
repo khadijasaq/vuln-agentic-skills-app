@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -331,6 +332,99 @@ def test_skill_in_allowlist_requires_valid_digest(tmp_settings, tmp_path):
 
     assert record.valid is False
     assert any("digest" in error for error in record.errors)
+
+
+# --- The revocation lists (AST02 T-08, REQ-08) ------------------------------------
+
+
+def _revocation_registry(
+    tmp_settings, tmp_path, revocations: dict, skill_id: str = "example_skill"
+) -> tuple[SkillRegistry, Path]:
+    """
+    Point the app at a scratch clone of the policy folder populated with a given
+    revocation list, and discover one well-formed skill from a scratch catalogue.
+
+    The skill lives outside the managed channel, so the allowlist never interferes
+    with these tests; only the (unconditional) revocation check is exercised.
+    """
+    policy = tmp_path / "policy"
+    shutil.copytree(tmp_settings.policy_dir, policy, dirs_exist_ok=True)
+    (policy / "revocations.json").write_text(
+        json.dumps(revocations), encoding="utf-8"
+    )
+
+    catalogue = tmp_path / "catalogue"
+    write_skill(catalogue / skill_id, {**GOOD_MANIFEST, "id": skill_id})
+
+    config.set_settings(dataclasses.replace(tmp_settings, policy_dir=policy))
+    registry_module.reset_registry()
+
+    return discover_from(catalogue), catalogue / skill_id
+
+
+def test_revoked_publisher_makes_skill_invalid(tmp_settings, tmp_path):
+    """REQ-08: a skill whose publisher is revoked is invalid, even if well-formed."""
+    manifest = {
+        **GOOD_MANIFEST,
+        "id": "example_skill",
+        "author": "Northwind Automations",
+    }
+    write_catalogue = tmp_path / "catalogue"
+    write_skill(write_catalogue / "example_skill", manifest)
+
+    policy = tmp_path / "policy"
+    shutil.copytree(tmp_settings.policy_dir, policy)
+    (policy / "revocations.json").write_text(
+        json.dumps({"digests": [], "publishers": ["Northwind Automations"]}),
+        encoding="utf-8",
+    )
+    config.set_settings(dataclasses.replace(tmp_settings, policy_dir=policy))
+    registry_module.reset_registry()
+
+    registry = discover_from(write_catalogue)
+    record = registry.get("example_skill")
+
+    assert record.valid is False
+    assert any("revoked" in error for error in record.errors)
+
+
+def test_revoked_digest_makes_skill_invalid(tmp_settings, tmp_path):
+    """REQ-08: a skill whose content digest is revoked is invalid, even if well-formed."""
+    registry, skill_folder = _revocation_registry(
+        tmp_settings, tmp_path, {"digests": [], "publishers": []}
+    )
+    digest = json.loads((skill_folder / "manifest.json").read_text())["digest"]
+
+    registry2, _ = _revocation_registry(
+        tmp_settings, tmp_path, {"digests": [digest], "publishers": []}
+    )
+    record = registry2.get("example_skill")
+
+    assert record.valid is False
+    assert any("revoked" in error for error in record.errors)
+
+
+def test_revoked_skill_cannot_reenter_installed(tmp_settings, tmp_path):
+    """
+    REQ-08: once a skill is revoked it stops being usable - it is no longer listed
+    as installed and cannot be (re-)installed, even though it was trusted before.
+    """
+    registry, skill_folder = _revocation_registry(
+        tmp_settings, tmp_path, {"digests": [], "publishers": []}
+    )
+    registry.install("example_skill")
+    assert "example_skill" in [item.skill_id for item in registry.installed()]
+
+    digest = json.loads((skill_folder / "manifest.json").read_text())["digest"]
+    registry2, _ = _revocation_registry(
+        tmp_settings, tmp_path, {"digests": [digest], "publishers": []}
+    )
+
+    record = registry2.get("example_skill")
+    assert record.valid is False
+    assert "example_skill" not in [item.skill_id for item in registry2.installed()]
+    with pytest.raises(SkillInvalid):
+        registry2.install("example_skill")
 
 
 # --- What the AI model is allowed to see -----------------------------------------
