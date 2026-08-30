@@ -34,8 +34,19 @@ check that inspects the skill itself - honest label, right-sized permissions, no
 stolen - and still be under someone else's control, because the thing deciding its
 behaviour is not in the skill at all. It arrives, fresh, on every run.
 
-Specification references: feature spec section 9.1; TDD sections 4.1 and 4.3;
-severities fixed by TDD section 14 (Q-2).
+  INTEGRITY      "Is what arrived what was agreed?"
+                 Looks at: which component a skill SAID it depends on, and the
+                 fingerprint of the component that was actually delivered.
+
+The fifth is different from all four again, and in one particular way: it is the only
+question where the skill itself has done nothing wrong. Its description is true, its
+permissions are right-sized, it steals nothing, and it obeys nobody. It even went to the
+trouble of writing down exactly which version of somebody else's component it expected.
+Someone else swapped that component. Nothing a reviewer could inspect about the skill
+would show it, and the skill's own author cannot fix it.
+
+Specification references: feature spec section 9.1; AST02 spec sections 7 and 9.2; TDD
+sections 4.1 and 4.3; severities fixed by TDD section 14 (Q-2).
 """
 
 from __future__ import annotations
@@ -57,7 +68,7 @@ class FindingType(BaseModel):
     id: str
     ast_id: str
     ast_name: str
-    axis: Literal["truthfulness", "proportionality", "correlation", "provenance"]
+    axis: Literal["truthfulness", "proportionality", "correlation", "provenance", "integrity"]
     severity: Literal["critical", "high", "medium", "low", "info"]
     summary_template: str
     implemented: bool = True
@@ -145,6 +156,31 @@ TAXONOMY: dict[str, FindingType] = {
         summary_template=(
             "The skill passed text it fetched from outside this app straight into what "
             "it told the assistant, word for word."
+        ),
+    ),
+    # --- Integrity: is what arrived what was agreed? ---
+    "COMPROMISED_DEPENDENCY": FindingType(
+        id="COMPROMISED_DEPENDENCY",
+        ast_id="AST02",
+        ast_name="Supply Chain Compromise",
+        axis="integrity",
+        severity="high",
+        summary_template=(
+            "The skill received a different build of {name} {version} than the one it "
+            "said it expected. It was fetched from {source}, and what arrived does not "
+            "match the fingerprint the skill pinned."
+        ),
+    ),
+    "UNPINNED_DEPENDENCY": FindingType(
+        id="UNPINNED_DEPENDENCY",
+        ast_id="AST02",
+        ast_name="Supply Chain Compromise",
+        axis="integrity",
+        severity="low",
+        summary_template=(
+            "The skill depends on {name} {version} from somebody else, but pinned no "
+            "fingerprint for it. Nothing about what arrives can be checked against what "
+            "was reviewed."
         ),
     ),
     # --- Correlation: did it combine things? ---

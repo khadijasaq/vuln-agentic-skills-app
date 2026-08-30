@@ -43,11 +43,13 @@ def make_manifest(
     skill_id: str = "test_skill",
     category: str = "reporting",
     capabilities: list[dict] | None = None,
+    dependencies: list[dict] | None = None,
 ) -> Manifest:
     """
     Build a made-up skill description for a test.
 
-    In: an identifier, a category, and the permissions it claims.
+    In: an identifier, a category, the permissions it claims, and any components from
+    elsewhere it says it is built on.
     Out: a Manifest.
 
     This is fabricated test material. It is not a real skill and nothing runs it.
@@ -62,6 +64,7 @@ def make_manifest(
         description="A made-up description used only by the automated checks.",
         invocation={"when_to_use": "never - this is test material", "parameters": {"type": "object"}},
         capabilities=capabilities if capabilities is not None else [],
+        dependencies=dependencies if dependencies is not None else [],
         entrypoint="skill.py:run",
     )
 
@@ -435,6 +438,9 @@ def test_every_problem_type_belongs_to_exactly_one_question():
             # mirror image of correlation, watching instructions arrive rather than
             # data leave.
             "provenance",
+            # Added with AST02 (TDD 4.10): "is what arrived what was agreed?" - the only
+            # question where the skill itself has done nothing wrong.
+            "integrity",
         }
 
 
@@ -483,3 +489,135 @@ def test_a_finding_points_back_at_the_exact_thing_that_caused_it(engine):
 
     assert len(findings) == 1
     assert findings[0].evidence["observation_seq"] == 2
+
+
+# --- The supply-chain question: is what arrived what was agreed? -----------------
+
+
+def component(pin: str | None = "sha256:" + "a" * 64, source: str = "http://127.0.0.1:8000/c/1"):
+    """
+    One made-up component a skill says it is built on.
+
+    In: the fingerprint it pins (or nothing) and where it comes from. Out: the declaration.
+    """
+    declaration = {
+        "name": "some-component",
+        "version": "1.0.0",
+        "source": source,
+        "reason": "a made-up component used only by the automated checks",
+    }
+    if pin is not None:
+        declaration["integrity"] = pin
+    return declaration
+
+
+def delivered(digest: str, *, source: str = "http://127.0.0.1:8000/c/1", status: int = 200):
+    """A record of a component being handed over, carrying the app's fingerprint of it."""
+    log = ObservationLog("inv_test")
+    log.record(
+        capability="net.outbound",
+        resource=source,
+        detail={"method": "GET", "status": status, "response_sha256": digest, "response_bytes": 9},
+    )
+    return log.entries()
+
+
+def test_a_component_that_matches_its_fingerprint_is_not_reported(engine):
+    """
+    The clean case. What was promised is what turned up, so there is nothing to say.
+
+    This is the one that makes the check a check rather than a rubber stamp: it has to be
+    able to stay quiet on a skill that declares a component and fetches it.
+    """
+    manifest = make_manifest(category="integration", dependencies=[component()])
+
+    assert engine.check_integrity(manifest, delivered("a" * 64)) == []
+
+
+def test_a_component_that_does_not_match_its_fingerprint_is_reported(engine):
+    """Same skill, same fetch - only the delivered bytes differ, and now it is reported."""
+    manifest = make_manifest(category="integration", dependencies=[component()])
+
+    findings = engine.check_integrity(manifest, delivered("b" * 64), invocation_id="inv_1")
+
+    assert [f.type for f in findings] == ["COMPROMISED_DEPENDENCY"]
+    assert findings[0].ast_id == "AST02"
+    assert findings[0].axis == "integrity"
+    assert findings[0].severity == "high"
+    assert findings[0].dependency["reason"] == "digest_mismatch"
+
+
+def test_a_component_with_no_fingerprint_is_reported_before_it_ever_runs(engine):
+    """
+    ACCEPTANCE TEST A-11.
+
+    "You said which component, but not what it should look like." Nothing has gone wrong
+    yet, but nothing about what arrives can be checked - and that is visible from the
+    description alone, so it is said at install time.
+    """
+    manifest = make_manifest(category="integration", dependencies=[component(pin=None)])
+
+    findings = engine.evaluate_install(manifest)
+
+    assert [f.type for f in findings] == ["UNPINNED_DEPENDENCY"]
+    assert findings[0].ast_id == "AST02"
+    assert findings[0].severity == "low"
+    assert findings[0].trigger == "install"
+    assert findings[0].dependency["reason"] == "no_pin_declared"
+    assert findings[0].observed is None
+
+
+def test_a_skill_that_declares_no_component_is_never_asked_about_one(engine):
+    """
+    Why every skill written before this question existed is completely unaffected.
+
+    With nothing declared there is nothing to compare, so the check has no work to do -
+    whatever the skill did, and whatever came back from it.
+    """
+    manifest = make_manifest(category="integration")
+
+    assert engine.check_integrity(manifest, delivered("b" * 64)) == []
+    assert engine.evaluate_install(manifest) == []
+
+
+def test_an_error_reply_is_not_a_delivery(engine):
+    """
+    A registry with nothing to offer is not a compromised registry.
+
+    The app fingerprints whatever comes back, including a short "no such component" reply.
+    Comparing THAT against the pin would report a substituted component every time a lab
+    was merely empty - so only a successful delivery is ever compared.
+    """
+    manifest = make_manifest(category="integration", dependencies=[component()])
+
+    assert engine.check_integrity(manifest, delivered("b" * 64, status=404)) == []
+
+
+def test_the_five_questions_stay_separate(engine):
+    """
+    The newest question reads its own inputs and nothing else.
+
+    A skill can be over-privileged AND handed the wrong component, and the two are reported
+    as two different problems by two different checks. If the supply-chain check started
+    reading permissions, or the proportionality check started reading deliveries, the five
+    questions would begin collapsing into one vague one.
+    """
+    manifest = make_manifest(
+        category="reporting",
+        capabilities=[{"id": "net.outbound", "scope": ["*"], "reason": "anywhere"}],
+        dependencies=[component()],
+    )
+
+    supply_chain = engine.check_integrity(manifest, delivered("b" * 64))
+    proportionality = engine.check_proportionality(manifest)
+
+    assert [f.type for f in supply_chain] == ["COMPROMISED_DEPENDENCY"]
+    assert [f.type for f in proportionality] == ["EXCESSIVE_GRANT"]
+
+    # And the proportionality answer does not change when the delivery does. Compared by
+    # what they SAY rather than as objects, because every finding carries its own
+    # identifier and timestamp and so is never equal to another.
+    def shape(findings):
+        return [(f.type, f.granted, f.observed, f.dependency) for f in findings]
+
+    assert shape(engine.check_proportionality(manifest)) == shape(proportionality)

@@ -25,6 +25,14 @@ That third question is answered independently of the other two, on purpose: a sk
 can be perfectly honest and perfectly modest and still steal by combining abilities,
 so correlation must never be built on top of the truthfulness check (invariant I-7).
 
+PROVENANCE      "Where did the behaviour come from?"
+                Reads what came BACK from the network, and what the skill did after.
+
+INTEGRITY       "Is what arrived what was agreed?"
+                Compares the component a skill SAID it depends on against the
+                fingerprint of the component that was actually delivered. The only
+                question here where the skill itself has done nothing wrong.
+
 THIS FILE IS DELIBERATELY PURE. It takes information in, works out an answer, and
 hands it back. It reads no files, writes nothing, and never asks the AI model
 anything. That is what makes "the honest skill produces no findings" a guarantee
@@ -593,6 +601,155 @@ class FindingsEngine:
 
         return None
 
+    # --- Question 5: is what arrived what was agreed? -----------------------------
+
+    def check_integrity(
+        self,
+        manifest: Manifest,
+        observations: list[Observation] | None = None,
+        *,
+        trigger: Literal["install", "invocation"] = "invocation",
+        invocation_id: str | None = None,
+        activity_id: str | None = None,
+        model: str | None = None,
+    ) -> list[Finding]:
+        """
+        Look for a skill being handed a different component than the one it expected.
+
+        In: the skill's description, everything it did in order (if it has run yet), and
+        details for the record. Out: a list of problems found.
+
+        This is the fifth question, and it is unlike the other four in one way that is
+        worth stating plainly: the skill has done nothing wrong. Its description is true.
+        Its permissions are the right size. It stole nothing and obeyed nobody. It even
+        wrote down which exact build of somebody else's component it expected. Somebody
+        else swapped that component, and no amount of inspecting the skill would show it.
+
+        An analogy: the skill ordered a specific part, quoted the part number, and checked
+        the box when it arrived. The box has the right label on the outside and something
+        else inside. The person who ordered it is not the problem.
+
+        Two problems are looked for:
+
+          NO FINGERPRINT PINNED  the skill named a component but never said what it should
+                                 look like. Nothing that arrives can be checked at all.
+                                 Answerable from the description alone, so it is asked
+                                 even before the skill has ever run.
+
+          A DIFFERENT BUILD      the skill DID say what it should look like, something was
+                                 delivered, and the two do not match.
+
+        What this reads, and what it deliberately does not: it reads the skill's declared
+        components and the fingerprint the app recorded when something was delivered. It
+        never reads which permissions were declared, never reads the category yardstick,
+        never reads what was sent out, and - importantly - never reads what the delivered
+        component actually SAYS. Whether the content is malicious is a different question
+        belonging to a different check. This one asks only whether the bytes are the
+        agreed bytes, which is why a perfectly harmless substitution is still reported.
+
+        Two details, both load-bearing:
+          - only a SUCCESSFUL delivery is compared. A refused request never arrived, and a
+            reply that was an error ("no such component") is not a build of anything - it
+            has a fingerprint, but comparing it to the pin would report a compromise every
+            time the registry was simply empty;
+          - with no declared component there is nothing to compare, so this is silent for
+            every skill that does not stand on anything - which is all of them but one.
+        """
+        findings: list[Finding] = []
+
+        for dependency in manifest.dependencies:
+            described = {
+                "name": dependency.name,
+                "version": dependency.version,
+                "source": dependency.source,
+                "publisher": dependency.publisher,
+            }
+
+            if dependency.integrity is None:
+                # Nothing was promised, so nothing can be checked. This is visible from
+                # the description alone and needs no delivery to have happened.
+                findings.append(
+                    self._build(
+                        "UNPINNED_DEPENDENCY",
+                        manifest,
+                        dependency={
+                            **described,
+                            "declared_integrity": None,
+                            "delivered_integrity": None,
+                            "acquired_seq": None,
+                            "reason": "no_pin_declared",
+                        },
+                        trigger=trigger,
+                        invocation_id=invocation_id,
+                        activity_id=activity_id,
+                        model=model,
+                    )
+                )
+                # With no promise there is no comparison to make, so we are done with
+                # this component.
+                continue
+
+            pinned = dependency.integrity.split(":", 1)[1]
+
+            for acquired in self._deliveries_of(dependency, observations or []):
+                delivered = acquired.detail.get("response_sha256")
+                if delivered == pinned:
+                    # Exactly what was promised. Nothing to report - and this is the case
+                    # that proves the check can stay quiet.
+                    continue
+
+                findings.append(
+                    self._build(
+                        "COMPROMISED_DEPENDENCY",
+                        manifest,
+                        dependency={
+                            **described,
+                            "declared_integrity": dependency.integrity,
+                            "delivered_integrity": f"sha256:{delivered}",
+                            "delivered_bytes": acquired.detail.get("response_bytes"),
+                            "acquired_seq": acquired.seq,
+                            "reason": "digest_mismatch",
+                        },
+                        evidence_seq=acquired.seq,
+                        trigger=trigger,
+                        invocation_id=invocation_id,
+                        activity_id=activity_id,
+                        model=model,
+                    )
+                )
+
+        return findings
+
+    @staticmethod
+    def _deliveries_of(dependency, observations: list[Observation]) -> list[Observation]:
+        """
+        Find the times this particular component was actually delivered.
+
+        In: one declared component, and the notebook of what the skill did.
+        Out: the lines describing a successful delivery of it.
+
+        Matching is on the address, exactly as written. That is deliberate: the skill
+        says where it gets the component from, and it must be the same place it actually
+        went. A near-match would be a guess, and a guess is not evidence.
+        """
+        deliveries: list[Observation] = []
+
+        for observation in observations:
+            if observation.capability != "net.outbound":
+                continue
+            if observation.resource != dependency.source:
+                continue
+            # A reply that never arrived, or that was an error page rather than the
+            # component, is not a delivery. Treating one as a delivery would report a
+            # compromise every time the component was merely missing.
+            if observation.detail.get("status") != 200:
+                continue
+            if not observation.detail.get("response_sha256"):
+                continue
+            deliveries.append(observation)
+
+        return deliveries
+
     # --- Putting it together ------------------------------------------------------
 
     def evaluate_invocation(
@@ -646,6 +803,16 @@ class FindingsEngine:
                 model=model,
             )
         )
+        findings.extend(
+            self.check_integrity(
+                manifest,
+                observations,
+                trigger="invocation",
+                invocation_id=invocation_id,
+                activity_id=activity_id,
+                model=model,
+            )
+        )
         return findings
 
     def evaluate_install(self, manifest: Manifest, *, model: str | None = None) -> list[Finding]:
@@ -655,10 +822,22 @@ class FindingsEngine:
         In: the skill's description. Out: any problems visible from the description
         alone.
 
-        Only the "did it need that much power?" question can be answered here. The
-        other question needs behaviour to compare against.
+        Two questions can be answered here, and both for the same reason: they are about
+        what the skill CLAIMS, not about what it does.
+
+          "Did it need that much power?"        - the whole question.
+          "Is what arrived what was agreed?"    - only the half that asks whether the
+                                                  skill promised anything at all. Whether
+                                                  a delivery matched cannot be asked
+                                                  before there has been a delivery, and
+                                                  no delivery has happened yet, so that
+                                                  half is structurally silent here.
+
+        The remaining questions all need behaviour to compare against.
         """
-        return self.check_proportionality(manifest, trigger="install", model=model)
+        findings = self.check_proportionality(manifest, trigger="install", model=model)
+        findings.extend(self.check_integrity(manifest, trigger="install", model=model))
+        return findings
 
     # --- Internal helpers ---------------------------------------------------------
 
@@ -682,6 +861,7 @@ class FindingsEngine:
         granted: dict[str, Any] | None = None,
         correlation: dict[str, Any] | None = None,
         provenance: dict[str, Any] | None = None,
+        dependency: dict[str, Any] | None = None,
         declared_scope: list[str] | None = None,
         evidence_seq: int | None = None,
         trigger: Literal["install", "invocation"] = "invocation",
@@ -697,8 +877,9 @@ class FindingsEngine:
 
         Which evidence field is filled tells a reader which question the finding
         answers - "observed" for truthfulness, "granted" for proportionality,
-        "correlation" for a combination problem - so the different kinds can be told
-        apart without reading the wording.
+        "correlation" for a combination problem, "provenance" for an instruction
+        problem, "dependency" for a supply-chain one - so the different kinds can be
+        told apart without reading the wording.
 
         For a combination problem there is no single "observed" line, because the
         problem is a pair of lines - a read and a later send. So "observed" is left
@@ -708,7 +889,7 @@ class FindingsEngine:
         finding_type: FindingType = TAXONOMY[type_id]
         stamp = now_iso()
 
-        summary = self._describe(finding_type, observed, granted, declared_scope)
+        summary = self._describe(finding_type, observed, granted, declared_scope, dependency)
 
         return Finding(
             id=new_id("fnd"),
@@ -733,6 +914,7 @@ class FindingsEngine:
             granted=granted,
             correlation=correlation,
             provenance=provenance,
+            dependency=dependency,
             summary=summary,
             evidence={
                 "observation_seq": observed.seq if observed else evidence_seq,
@@ -749,6 +931,7 @@ class FindingsEngine:
         observed: Observation | None,
         granted: dict[str, Any] | None,
         declared_scope: list[str] | None,
+        dependency: dict[str, Any] | None = None,
     ) -> str:
         """
         Turn a problem into a readable sentence.
@@ -757,12 +940,19 @@ class FindingsEngine:
 
         If anything is missing we fall back to the raw template rather than failing -
         a slightly clumsy sentence is much better than losing the finding.
+
+        Every kind of evidence contributes its own words to the same pot, and each
+        template picks out only the ones it uses. Adding a new kind therefore cannot
+        change any sentence that was already being written.
         """
         values: dict[str, Any] = {
             "capability": (observed.capability if observed else (granted or {}).get("capability", "")),
             "resource": observed.resource if observed else "",
             "declared_scope": ", ".join(declared_scope) if declared_scope else "",
             "reason": (granted or {}).get("reason", ""),
+            "name": (dependency or {}).get("name", ""),
+            "version": (dependency or {}).get("version", ""),
+            "source": (dependency or {}).get("source", ""),
         }
         try:
             return finding_type.summary_template.format(**values)

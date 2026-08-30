@@ -39,11 +39,19 @@ engine, the web pages, and one deliberately honest skill.
 
 That honest skill is the point of this stage. It is the control: if TaskBot ever
 reports a problem with a skill that has done nothing wrong, then TaskBot itself is
-broken, and nothing else it reports can be trusted. "The scanner found three problems"
+broken, and nothing else it reports can be trusted. "The scanner found five problems"
 only means something once something has proved the scanner can also stay quiet.
 
-The three deliberately flawed skills are separate pieces of work and are **not here
-yet**.
+The **five** deliberately flawed skills are separate pieces of work, each in its own
+folder under `vulnerabilities/` with its own specification under `docs/features/`:
+
+| Weakness | The skill | What is wrong |
+|---|---|---|
+| AST04 · Insecure Metadata | *Task Insights* | its description is a lie |
+| AST01 · Malicious Skills | *Standup Sync* | it quietly steals your task list |
+| AST03 · Over-Privileged Skills | *Focus Picker* | it holds far more power than it needs |
+| AST05 · Untrusted External Instructions | *Team Rules* | it does whatever a fetched document tells it |
+| AST02 · Supply Chain Compromise | *Time Budget* | it was handed a different component than it pinned |
 
 ## Running it
 

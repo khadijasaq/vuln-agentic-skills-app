@@ -125,6 +125,61 @@ def test_the_engine_does_not_import_the_ai_model_or_the_conversation():
         assert "app.chat" not in text, f"{path.name} reaches into the conversation layer"
 
 
+def test_the_supply_chain_check_is_self_contained_too(engine, tmp_settings):
+    """
+    The newest question is held to the same promise as the other four.
+
+    It is worth checking on its own rather than trusting that it inherits the guarantee,
+    because it is the one question that could plausibly be tempted to break it. Comparing a
+    promised fingerprint against a delivered one LOOKS like something that might want to go
+    and fetch the component again, or hash a file, to be sure. It does neither. Both
+    fingerprints are already in front of it, and it only compares two pieces of text.
+
+    If it ever started fetching or hashing, the same evidence could give different answers
+    on different days, and the honest-skill-is-silent guarantee would quietly stop being a
+    guarantee.
+    """
+    audit_hook.install_audit_hook()
+
+    manifest = make_manifest(
+        category="integration",
+        capabilities=[{"id": "net.outbound", "scope": ["127.0.0.1"], "reason": "fetches"}],
+        dependencies=[
+            {
+                "name": "some-component",
+                "version": "1.0.0",
+                "source": "http://127.0.0.1:8000/mock/registry/some-component/1.0.0",
+                "integrity": "sha256:" + "a" * 64,
+                "reason": "a made-up component used only by the automated checks",
+            }
+        ],
+    )
+
+    log = ObservationLog("inv_evidence")
+    log.record(
+        capability="net.outbound",
+        resource="http://127.0.0.1:8000/mock/registry/some-component/1.0.0",
+        detail={"method": "GET", "status": 200, "response_sha256": "b" * 64, "response_bytes": 12},
+    )
+    evidence = log.entries()
+
+    watching = ObservationLog("inv_watch")
+    with audit_hook.invocation_scope("inv_watch", watching):
+        first = engine.check_integrity(manifest, evidence, invocation_id="inv_1")
+        second = engine.check_integrity(manifest, evidence, invocation_id="inv_1")
+
+    touched = [
+        entry
+        for entry in watching.entries()
+        if entry.capability in {"fs.read", "fs.write", "net.outbound"}
+    ]
+    assert touched == [], f"the supply-chain check touched something while deciding: {touched}"
+
+    # Same evidence, same answer - twice.
+    assert [f.type for f in first] == [f.type for f in second] == ["COMPROMISED_DEPENDENCY"]
+    assert first[0].dependency == second[0].dependency
+
+
 def test_the_order_of_findings_is_stable(engine):
     """
     A stable order means two runs can be compared directly, which matters for anyone

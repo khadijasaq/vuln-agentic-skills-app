@@ -4,9 +4,11 @@ One folder per deliberate weakness. Each is completely independent of the others
 
 ```
 vulnerabilities/
-├── ast04-insecure-metadata/     a skill that lies in its description
-├── ast01-malicious-skills/      a useful skill that quietly steals your task list
-└── ast03-over-privileged/       a skill holding far more power than it needs
+├── ast04-insecure-metadata/               a skill that lies in its description
+├── ast01-malicious-skills/                a useful skill that quietly steals your task list
+├── ast03-over-privileged/                 a skill holding far more power than it needs
+├── ast05-untrusted-external-instructions/ a skill that does whatever a fetched document says
+└── ast02-supply-chain/                    a skill handed a different component than it pinned
 ```
 
 Each folder holds exactly one weakness, in the same shape:
@@ -18,9 +20,19 @@ Each folder holds exactly one weakness, in the same shape:
 └── tests/         proof that it fires, and that it is detected correctly
 ```
 
-The app finds these automatically: `SkillRegistry.default_roots()` searches the shared
-catalogue **plus** every `vulnerabilities/*/skill/` folder. Adding a weakness means
-adding a folder — no wiring, no registration list to update.
+Two of them carry one extra folder, because their attack is **content** rather than code —
+a file a person can read and edit without touching Python:
+
+```
+ast05-.../hub/       the document the mock team hub serves
+ast02-.../registry/  the components the mock registry publishes
+```
+
+The app finds all of this automatically. `SkillRegistry.default_roots()` searches the shared
+catalogue **plus** every `vulnerabilities/*/skill/` folder, and the startup steps copy any
+`hub/` document and any `registry/` components into `data/` on a fresh lab. None of that
+machinery knows the name of a single weakness — it looks for the shape, not for `ast02`.
+Adding a weakness means adding a folder — no wiring, no registration list to update.
 
 ---
 
@@ -36,9 +48,9 @@ them; it does not carry its own version of them.
 
 This is not tidiness. Three things depend on it:
 
-1. **The weaknesses must be comparable.** All three are judged by the same engine
-   against the same policy. If each carried its own detector, "the scanner found three
-   problems" would mean three different scanners agreeing with themselves.
+1. **The weaknesses must be comparable.** All five are judged by the same engine
+   against the same policy. If each carried its own detector, "the scanner found five
+   problems" would mean five different scanners agreeing with themselves.
 
 2. **The control skill must stay meaningful.** `backend/skills/catalogue/task_summary`
    is honest and must always produce zero findings. That only proves anything if it
@@ -54,13 +66,26 @@ copied into the folder.
 
 ---
 
-## What is not here yet
+## What is here
 
-All three folders are empty apart from their READMEs. The platform they plug into is
-built and tested; the weaknesses themselves are separate pieces of work, each with its
-own specification under `docs/features/`.
+All five weaknesses are built: each ships its manifest, its code, and its own tests, and
+each has a specification under `docs/features/`.
 
-The findings engine already knows about all three risk types. Two of them —
-truthfulness (AST04) and proportionality (AST03) — are fully implemented and proven
-against fabricated test descriptions. The third, correlation (AST01), is declared in
-the taxonomy with `implemented: False`, waiting for its feature.
+The findings engine asks **five** separate questions, and each weakness exists to prove that
+one of them is genuinely necessary:
+
+| Question | Asks | Weakness |
+|---|---|---|
+| truthfulness | did it do what it said? | AST04 |
+| proportionality | did it need that much power? | AST03 |
+| correlation | did it combine two harmless abilities into a harmful one? | AST01 |
+| provenance | where did its behaviour come from? | AST05 |
+| integrity | is what it was handed what it agreed to? | AST02 |
+
+Two of them needed something added to the shared platform, and both had to argue for it
+against the rule in `docs/TDD.md` §12. **AST05** made the capability broker start recording
+what comes back from a network request. **AST02** added no recording at all — it gave a
+manifest somewhere to declare which component it depends on, and a check that compares that
+promise against a fingerprint the app was already writing down.
+
+Everything else plugs into machinery that was finished before it existed.

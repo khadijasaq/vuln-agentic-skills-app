@@ -3,8 +3,9 @@ Reading and checking a skill's description file (its "manifest").
 
 Every skill is a folder holding two things:
 
-  manifest.json - what the skill SAYS about itself: its name, what it does, and
-                  which permissions it claims to need.
+  manifest.json - what the skill SAYS about itself: its name, what it does, which
+                  permissions it claims to need, and which components built by other
+                  people it says it is standing on.
   skill.py      - what the skill ACTUALLY does when it runs.
 
 Those two are written separately and on purpose. The gap between what something
@@ -41,6 +42,19 @@ SKILL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,39}$")
 # The entrypoint says which file and which function to call, e.g. "skill.py:run".
 ENTRYPOINT_PATTERN = re.compile(r"^[A-Za-z0-9_]+\.py:[A-Za-z_][A-Za-z0-9_]*$")
 
+# The name of a component a skill depends on. Lowercase letters, digits and hyphens,
+# starting with a letter - the shape package names take almost everywhere.
+DEPENDENCY_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]{2,63}$")
+
+# The fingerprint a skill pins for a component it depends on.
+#
+# The value after "sha256:" is NOT a plain checksum of a file. It is the fingerprint
+# this app itself records when that component is delivered - see digest_of() in
+# app/monitor/observations.py, which writes the data out as JSON before hashing it.
+# Defining the pin as "the value the app would record" is what makes the later
+# comparison exact rather than approximate. See the AST02 registry README.
+INTEGRITY_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+
 
 class CapabilityDeclaration(BaseModel):
     """
@@ -53,6 +67,29 @@ class CapabilityDeclaration(BaseModel):
 
     id: str
     scope: list[str] = Field(default_factory=list)
+    reason: str = ""
+
+
+class DependencyDeclaration(BaseModel):
+    """
+    One component, published by somebody else, that a skill says it is built on.
+
+    name      - what the component is called.
+    version   - which version of it the skill expects.
+    source    - where the skill gets it from.
+    integrity - the fingerprint of the exact build the skill's author reviewed. This is
+                the promise: "the thing I fetch should look exactly like this". Leaving
+                it out is allowed, and is itself worth reporting, because then nothing
+                about what arrives can be checked.
+    publisher - who publishes it. Shown to a person; never compared against anything.
+    reason    - why the skill needs it, shown in the skill store.
+    """
+
+    name: str
+    version: str
+    source: str
+    integrity: str | None = None
+    publisher: str = ""
     reason: str = ""
 
 
@@ -81,6 +118,10 @@ class Manifest(BaseModel):
     description: str
     invocation: Invocation
     capabilities: list[CapabilityDeclaration] = Field(default_factory=list)
+    # Components from elsewhere that this skill is built on. Optional: a skill that
+    # stands on nothing but the app itself simply has none, which is why this defaults
+    # to empty and every skill written before this existed is unaffected.
+    dependencies: list[DependencyDeclaration] = Field(default_factory=list)
     entrypoint: str
 
 
@@ -191,6 +232,63 @@ def _validate_capability(
     if not isinstance(reason, str) or not reason.strip():
         # The reason is shown to a person deciding whether to install the skill, so
         # a blank one hides exactly the information they need.
+        errors.append(f"{where}: 'reason' must explain why the skill needs this.")
+    elif len(reason) > 200:
+        errors.append(f"{where}: 'reason' must be 200 characters or fewer.")
+
+
+def _validate_dependency(
+    index: int,
+    declaration: dict[str, Any],
+    errors: list[str],
+) -> None:
+    """
+    Check one declared component and add any problems to the errors list.
+
+    In: its position in the list, the raw declaration, and the list to add problems to.
+    Out: nothing (problems are appended to `errors`).
+
+    Note what is NOT checked here: whether the component actually exists, whether it can
+    be fetched, and whether the fingerprint is correct. This file only deals with the
+    CLAIM. Whether what arrives matches what was claimed is a completely different
+    question, asked later and somewhere else, once a skill has actually run and fetched
+    something. Checking it here would also be impossible - nothing has been fetched yet.
+    """
+    where = f"dependencies[{index}]"
+
+    name = declaration.get("name")
+    if not isinstance(name, str) or not name.strip():
+        errors.append(f"{where}: 'name' is required and must be non-empty text.")
+    elif not DEPENDENCY_NAME_PATTERN.match(name):
+        errors.append(
+            f"{where}: 'name' must be 3-64 characters of lowercase letters, digits and "
+            f"hyphens, starting with a letter. Got {name!r}."
+        )
+
+    for field in ["version", "source"]:
+        value = declaration.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{where}: '{field}' is required and must be non-empty text.")
+
+    integrity = declaration.get("integrity")
+    if integrity is not None:
+        # Absent is allowed - an unpinned component is a real thing people ship, and it
+        # is reported rather than rejected. Present but malformed is a typo, and a typo
+        # in a fingerprint would silently mean "this never matches anything".
+        if not isinstance(integrity, str) or not INTEGRITY_PATTERN.match(integrity):
+            errors.append(
+                f"{where}: 'integrity', when given, must look like "
+                f"\"sha256:\" followed by 64 lowercase hex characters. Got {integrity!r}."
+            )
+
+    publisher = declaration.get("publisher", "")
+    if not isinstance(publisher, str):
+        errors.append(f"{where}: 'publisher' must be text.")
+
+    reason = declaration.get("reason", "")
+    if not isinstance(reason, str) or not reason.strip():
+        # Like a capability's reason, this is shown to a person deciding whether to
+        # install the skill, so a blank one hides exactly the information they need.
         errors.append(f"{where}: 'reason' must explain why the skill needs this.")
     elif len(reason) > 200:
         errors.append(f"{where}: 'reason' must be 200 characters or fewer.")
@@ -313,6 +411,17 @@ def parse_manifest(
                 errors.append(f"capabilities[{index}]: must be an object.")
                 continue
             _validate_capability(index, declaration, vocabulary, errors)
+
+    # --- declared components from elsewhere ---
+    dependencies = raw.get("dependencies", [])
+    if not isinstance(dependencies, list):
+        errors.append("'dependencies' must be a list (it may be empty).")
+    else:
+        for index, declaration in enumerate(dependencies):
+            if not isinstance(declaration, dict):
+                errors.append(f"dependencies[{index}]: must be an object.")
+                continue
+            _validate_dependency(index, declaration, errors)
 
     if errors:
         return None, errors

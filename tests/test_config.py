@@ -113,6 +113,8 @@ def test_derived_file_paths_all_sit_inside_the_data_folder(monkeypatch, tmp_path
         settings.activity_file,
         settings.markers_dir,
         settings.collector_dir,
+        settings.hub_dir,
+        settings.registry_dir,
     ]:
         assert Path(path).is_relative_to(settings.data_dir)
 

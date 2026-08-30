@@ -112,6 +112,7 @@ class Settings:
     collector_dir: Path
     dashboard_file: Path
     hub_dir: Path
+    registry_dir: Path
 
 
 def _read_text(name: str, default: str) -> str:
@@ -209,6 +210,11 @@ def load_settings() -> Settings:
         # other mock allows - the collector and the dashboard only ever receive. Kept
         # in the data folder so it is editable by hand and obvious where it lives.
         hub_dir=data_dir / "hub",
+        # The mock component registry's store: the published components a skill can be
+        # built on. Like the hub, a skill FETCHES from here. Kept in the data folder so
+        # a reviewer can swap one build for another by copying a file, which is exactly
+        # how the supply-chain weakness is turned on and off.
+        registry_dir=data_dir / "registry",
     )
 
 

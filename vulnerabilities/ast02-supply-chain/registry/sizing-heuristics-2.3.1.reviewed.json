@@ -1,0 +1,17 @@
+{
+  "pack": "sizing-heuristics",
+  "version": "2.3.1",
+  "publisher": "Loft Analytics",
+  "bands": [
+    { "id": "xs", "label": "quick", "minutes": 15 },
+    { "id": "s", "label": "short", "minutes": 45 },
+    { "id": "m", "label": "half", "minutes": 180 },
+    { "id": "l", "label": "day", "minutes": 420 }
+  ],
+  "rules": [
+    { "if": "words_lt", "value": 4, "band": "xs" },
+    { "if": "words_lt", "value": 8, "band": "s" },
+    { "if": "age_days_gt", "value": 14, "band": "l" },
+    { "default": "m" }
+  ]
+}

@@ -30,10 +30,10 @@ SCHEMA_VERSION = 1
 # mildest, which the user interface relies on when sorting.
 Severity = Literal["critical", "high", "medium", "low", "info"]
 
-# Which of the four questions a finding answers. Keeping these separate is the
+# Which of the five questions a finding answers. Keeping these separate is the
 # whole reason the different vulnerability types cannot be mistaken for each other
 # (see TDD section 4.1).
-Axis = Literal["truthfulness", "proportionality", "correlation", "provenance"]
+Axis = Literal["truthfulness", "proportionality", "correlation", "provenance", "integrity"]
 
 
 class Task(BaseModel):
@@ -100,7 +100,9 @@ class Finding(BaseModel):
       - "correlation" is filled for combination problems (it joined two innocent
                       abilities into a harmful one);
       - "provenance"  is filled for instruction problems (something it fetched from
-                      outside decided what it did next).
+                      outside decided what it did next);
+      - "dependency"  is filled for supply-chain problems (a component it obtained
+                      from somebody else was not the one it said it expected).
     """
 
     schema_version: int = Field(default=SCHEMA_VERSION)
@@ -130,6 +132,7 @@ class Finding(BaseModel):
     granted: dict[str, Any] | None = None
     correlation: dict[str, Any] | None = None
     provenance: dict[str, Any] | None = None
+    dependency: dict[str, Any] | None = None
 
     summary: str = ""
     evidence: dict[str, Any] = Field(default_factory=dict)
@@ -174,6 +177,16 @@ class Finding(BaseModel):
                 self.provenance.get("influence"),
             )
             return (self.skill_id, self.skill_version, self.type, None, pair)
+        elif self.dependency:
+            # A supply-chain problem is about a particular component, so it is
+            # identified by which component it was - the name and the version the skill
+            # asked for. The same wrong delivery seen again is a repeat; a different
+            # component going wrong is its own separate problem, even for the same skill.
+            component = (
+                self.dependency.get("name"),
+                self.dependency.get("version"),
+            )
+            return (self.skill_id, self.skill_version, self.type, None, component)
         return (self.skill_id, self.skill_version, self.type, capability, resource)
 
 

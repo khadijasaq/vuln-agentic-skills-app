@@ -930,6 +930,7 @@ Catalogue in `TDD §12`. This feature's obligations:
 | **F** — vocabulary and baselines | `policy/*.json` as data; all four categories shipped (**S-7**) |
 | **G** — additive API | `schema_version` on every payload; contract per `TDD §7` |
 | **H** — marker kinds | `write_marker(finding, observation)` accepts any finding type |
+| **I** — integrity substrate *(recorded 2026-08-29)* | Not built by this feature. `detail.response_sha256`, delivered by AST05's D-15 response capture, turned out to serve a **second** axis: AST02's integrity check reads it to compare a delivered component against a pinned fingerprint, and needed **no new recording at all**. The same thing happened to **S-8**'s payload digests, which this feature built before AST01 existed to consume them — substrate outliving the feature that motivated it is now the pattern rather than the accident |
 
 Nothing above is built beyond what this feature needs. Seams C and D exist **only** for later features; both cost near-zero now and would be disruptive to retrofit.
 

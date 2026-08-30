@@ -1,9 +1,14 @@
 {#
   One security problem.
 
-  Which fields are filled tells you which question this finding answers:
-  what the skill DID (did it tell the truth?) or what it ASKED FOR (did it need
-  that much?). Showing them side by side is what makes the difference obvious.
+  Which fields are filled tells you which question this finding answers: what the skill
+  DID (did it tell the truth?), what it ASKED FOR (did it need that much?), what it
+  COMBINED, what it was TOLD, or what it was HANDED (is the component it obtained the one
+  it pinned?). Showing them side by side is what makes the difference obvious.
+
+  Note: the evidence blocks below cover the first two questions only. The other three
+  carry their detail in the finding's own fields, which the JSON API returns in full - a
+  gap recorded as a follow-up in the AST02 spec, open question Q-10.
 #}
 <div class="card">
   <div class="card-head">
@@ -25,6 +30,10 @@
           Compared what the skill did against what it declared.
         {% elif finding.axis == 'proportionality' %}
           Compared what the skill asked for against what its kind of skill needs.
+        {% elif finding.axis == 'provenance' %}
+          Looked at what came back from the network, and what the skill did next.
+        {% elif finding.axis == 'integrity' %}
+          Compared the component the skill obtained against the one it pinned.
         {% else %}
           Looked at the order of what the skill did.
         {% endif %}

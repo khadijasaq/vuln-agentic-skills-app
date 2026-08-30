@@ -29,6 +29,10 @@ def test_the_startup_steps_are_in_the_documented_order():
         # the starter tasks are - copied in only if it is not already there, so a
         # hand-edited document survives a restart.
         "seed_hub_document",
+        # Added with AST02: the components a skill can be built on are put in the mock
+        # registry the same way, and with the same "only if absent" rule - so a build
+        # someone has swapped by hand to try something survives a restart.
+        "seed_registry_components",
         "load_policy",
         "discover_skills",
     ]
@@ -65,6 +69,8 @@ def test_running_startup_creates_the_data_folders(tmp_settings):
     assert tmp_settings.data_dir.exists()
     assert tmp_settings.markers_dir.exists()
     assert (tmp_settings.collector_dir / "inbox").exists()
+    assert tmp_settings.hub_dir.exists()
+    assert tmp_settings.registry_dir.exists()
 
 
 def test_running_startup_seeds_a_fresh_lab(tmp_settings):

@@ -29,6 +29,7 @@ from app.api import routes as api_routes
 from app.mock import collector as collector_routes
 from app.mock import dashboard as dashboard_routes
 from app.mock import hub as hub_routes
+from app.mock import registry as registry_routes
 from app.web import routes as web_routes
 from app.config import Settings, get_settings
 
@@ -70,6 +71,7 @@ def step_prepare_data_folder(settings: Settings) -> None:
     settings.markers_dir.mkdir(parents=True, exist_ok=True)
     (settings.collector_dir / "inbox").mkdir(parents=True, exist_ok=True)
     settings.hub_dir.mkdir(parents=True, exist_ok=True)
+    settings.registry_dir.mkdir(parents=True, exist_ok=True)
 
 
 def step_seed_tasks(settings: Settings) -> None:
@@ -126,6 +128,57 @@ def step_seed_hub_document(settings: Settings) -> None:
             return
 
 
+def step_seed_registry_components(settings: Settings) -> None:
+    """
+    Put the published components in the mock registry, if they are not already there.
+
+    In: the settings. Out: nothing.
+
+    The registry serves components that skills are built on. Where do they come from?
+    From whichever weakness folder ships some - the same arrangement used for skills and
+    for the hub's document, where the app looks in every weakness folder rather than
+    being told about particular weaknesses by name.
+
+    That generality is deliberate and worth keeping. This file must not know that a
+    weakness called "ast02" exists; it knows only that a weakness MAY ship components,
+    and serves whichever it finds. Naming one here would put a weakness's content inside
+    the shared platform, which is exactly the separation the project depends on.
+
+    Two rules, both load-bearing:
+
+      - files whose name ends ".reviewed.json" are NOT copied. Those are reference copies
+        kept beside a weakness so a person can see what a component was supposed to look
+        like, and so a test can put the honest one in place deliberately. Serving them
+        automatically would quietly cancel the weakness they exist to explain.
+
+      - a component is only ever copied when there is nothing there already, so a file
+        someone has swapped or edited by hand survives a restart. Deleting it and
+        restarting puts the original back.
+    """
+    import shutil
+
+    if not settings.vulnerabilities_dir.exists():
+        return
+
+    # Sorted, so the order is the same on every machine and every run.
+    for folder in sorted(settings.vulnerabilities_dir.iterdir()):
+        source_dir = folder / "registry"
+        if not source_dir.is_dir():
+            continue
+
+        for candidate in sorted(source_dir.glob("*.json")):
+            if candidate.name.endswith(".reviewed.json"):
+                continue
+
+            destination = settings.registry_dir / candidate.name
+            if destination.exists():
+                continue
+
+            settings.registry_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(candidate, destination)
+            logger.info("Seeded the component registry with %s.", candidate.name)
+
+
 def step_load_policy(settings: Settings) -> None:
     """
     Load the two policy files: the list of capabilities and the category baselines.
@@ -167,6 +220,7 @@ STARTUP_STEPS: list[tuple[str, Callable[[Settings], None]]] = [
     ("prepare_data_folder", step_prepare_data_folder),
     ("seed_tasks", step_seed_tasks),
     ("seed_hub_document", step_seed_hub_document),
+    ("seed_registry_components", step_seed_registry_components),
     ("load_policy", step_load_policy),
     ("discover_skills", step_discover_skills),
 ]
@@ -218,6 +272,11 @@ def create_app() -> FastAPI:
     # this one serves a document a skill can fetch - which is what makes it possible to
     # show a skill taking its orders from outside itself.
     app.include_router(hub_routes.router, prefix="/mock", tags=["mock"])
+    # The fourth mock, and the second that hands something OUT. The hub serves a document
+    # a skill READS; this serves a component a skill is BUILT ON - addressed by name and
+    # version, because "same name, same version, different contents" is the whole of the
+    # weakness it exists to make visible.
+    app.include_router(registry_routes.router, prefix="/mock", tags=["mock"])
     app.include_router(web_routes.router, tags=["web"])
 
     # The stylesheet, font and small script the web pages use. These live in the
