@@ -34,7 +34,7 @@ from fastapi.testclient import TestClient
 from tests.conftest import tmp_settings, _clear_settings_between_tests  # noqa: F401
 
 from app.config import get_settings
-from app.llm.ollama_client import ChatResponse, ToolCall
+from app.llm.groq_client import ChatResponse, ToolCall
 from app.skills import host as host_module
 from app.skills import registry as registry_module
 from app.storage import seed

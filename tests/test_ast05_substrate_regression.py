@@ -47,7 +47,7 @@ import pytest
 import uvicorn
 
 from app.chat.orchestrator import ChatOrchestrator
-from app.llm.ollama_client import ChatResponse, ToolCall
+from app.llm.groq_client import ChatResponse, ToolCall
 from app.monitor.observations import payload_item_digests
 from app.skills import host as host_module
 from app.skills import registry as registry_module

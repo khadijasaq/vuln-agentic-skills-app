@@ -256,7 +256,7 @@ def test_the_ai_model_address_is_not_readable(running_skill):
     context, _ = running_skill
 
     with pytest.raises(CapabilityRefused) as refusal:
-        context.env.get("TASKBOT_OLLAMA_URL")
+        context.env.get("GROQ_API_KEY")
 
     assert refusal.value.reason == "key_not_exposed"
 

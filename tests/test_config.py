@@ -23,7 +23,8 @@ def test_defaults_are_the_documented_ones(monkeypatch):
     """With no environment variables set, every dial falls back to its documented default."""
     for name in [
         "TASKBOT_MODEL",
-        "TASKBOT_OLLAMA_URL",
+        "GROQ_API_KEY",
+        "GROQ_BASE_URL",
         "TASKBOT_HOST",
         "TASKBOT_PORT",
         "TASKBOT_DATA_DIR",
@@ -36,8 +37,9 @@ def test_defaults_are_the_documented_ones(monkeypatch):
 
     settings = config.load_settings()
 
-    assert settings.model == "llama3.1:8b"
-    assert settings.ollama_url == "http://127.0.0.1:11434"
+    assert settings.model == "openai/gpt-oss-120b"
+    assert settings.groq_api_key == ""
+    assert settings.groq_base_url == "https://api.groq.com/openai/v1"
     assert settings.host == "127.0.0.1"
     assert settings.port == 8000
     assert settings.history_turns == 10
@@ -136,4 +138,4 @@ def test_settings_are_shared_and_resettable():
 def test_blank_environment_variable_is_treated_as_unset(monkeypatch):
     """An empty value is almost always a mistake, so we fall back to the default."""
     monkeypatch.setenv("TASKBOT_MODEL", "   ")
-    assert config.load_settings().model == "llama3.1:8b"
+    assert config.load_settings().model == "openai/gpt-oss-120b"

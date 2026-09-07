@@ -72,9 +72,10 @@ class Settings:
     the settings you see at startup are the settings in force for the whole run.
     """
 
-    # --- how we talk to the local AI model ---
+    # --- how we talk to the AI model ---
     model: str
-    ollama_url: str
+    groq_api_key: str
+    groq_base_url: str
 
     # --- where the web server listens ---
     host: str
@@ -182,8 +183,9 @@ def load_settings() -> Settings:
     ).resolve()
 
     return Settings(
-        model=_read_text("TASKBOT_MODEL", "llama3.1:8b"),
-        ollama_url=_read_text("TASKBOT_OLLAMA_URL", "http://127.0.0.1:11434"),
+        model=_read_text("TASKBOT_MODEL", "openai/gpt-oss-120b"),
+        groq_api_key=_read_text("GROQ_API_KEY", ""),
+        groq_base_url=_read_text("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
         host=host,
         port=_read_int("TASKBOT_PORT", 8000),
         data_dir=data_dir,

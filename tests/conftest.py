@@ -40,6 +40,7 @@ def tmp_settings(tmp_path: pytest.TempPathFactory, monkeypatch) -> config.Settin
     # undoes these environment changes automatically when the test ends.
     monkeypatch.setenv("TASKBOT_DATA_DIR", str(data_dir))
     monkeypatch.setenv("TASKBOT_HOST", "127.0.0.1")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_key_for_unit_tests")
 
     # The skills and policy folders stay pointed at the real repository copies,
     # because tests want to read the genuine capability list and the genuine

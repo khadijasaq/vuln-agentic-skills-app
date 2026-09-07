@@ -1,1 +1,1 @@
-"""The connection to the local AI model (Ollama) that decides which skill, if any, to run."""
+"""The connection to the AI model (Groq cloud API) that decides which skill, if any, to run."""

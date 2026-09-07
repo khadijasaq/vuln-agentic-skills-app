@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.llm.ollama_client import ChatResponse, ToolCall
+from app.llm.groq_client import ChatResponse, ToolCall
 from app.main import create_app
 from app.skills import host as host_module
 from app.skills import registry as registry_module

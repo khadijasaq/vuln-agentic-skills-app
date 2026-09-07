@@ -40,7 +40,7 @@ from fastapi.templating import Jinja2Templates
 from app.api.routes import _skill_summary
 from app.chat.orchestrator import ChatOrchestrator
 from app.config import get_settings
-from app.llm.ollama_client import OllamaUnavailable
+from app.llm.groq_client import LlmUnavailable
 from app.skills.registry import SkillInvalid, SkillNotFound, get_registry
 from app.storage import store
 
@@ -204,7 +204,7 @@ def chat_send(message: str = Form(...)):
 
     try:
         ChatOrchestrator().run_turn(message)
-    except OllamaUnavailable as problem:
+    except LlmUnavailable as problem:
         _last_error = {"detail": problem.detail, "remedy": problem.remedy}
 
     return RedirectResponse(url="/", status_code=303)

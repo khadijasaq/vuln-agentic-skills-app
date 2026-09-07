@@ -15,7 +15,7 @@ import pytest
 
 from app.chat import prompts
 from app.chat.orchestrator import ChatOrchestrator, build_tool_list
-from app.llm.ollama_client import ChatResponse, OllamaUnavailable, ToolCall
+from app.llm.groq_client import ChatResponse, LlmUnavailable, ToolCall
 from app.skills import host as host_module
 from app.skills import registry as registry_module
 from app.storage import seed, store
@@ -47,10 +47,10 @@ class BrokenModel:
     """A stand-in for a model that is not running at all."""
 
     def chat(self, messages, tools=None):
-        raise OllamaUnavailable(
+        raise LlmUnavailable(
             "unreachable",
             "Could not reach the AI model.",
-            "Start it with: ollama serve",
+            "Check your Groq API connection.",
         )
 
 
@@ -303,15 +303,15 @@ def test_a12_an_unavailable_model_stops_the_exchange_loudly(tmp_settings):
     the "decide in code" this project forbids, and would let a demonstration appear
     to work with no model running at all.
     """
-    with pytest.raises(OllamaUnavailable) as failure:
+    with pytest.raises(LlmUnavailable) as failure:
         ChatOrchestrator(client=BrokenModel()).run_turn("hello")
 
-    assert "ollama serve" in failure.value.remedy
+    assert "Groq" in failure.value.remedy or "API" in failure.value.remedy
 
 
 def test_a12_a_failed_exchange_is_not_written_to_the_log(tmp_settings):
     """There was no exchange, so there is nothing to record."""
-    with pytest.raises(OllamaUnavailable):
+    with pytest.raises(LlmUnavailable):
         ChatOrchestrator(client=BrokenModel()).run_turn("hello")
 
     assert store.load_activity() == []

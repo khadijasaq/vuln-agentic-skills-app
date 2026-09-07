@@ -57,7 +57,7 @@ from app.config import get_settings
 from app.findings.baselines import load_baselines
 from app.findings.engine import FindingsEngine
 from app.findings.markers import write_marker
-from app.llm.ollama_client import ChatResponse, OllamaClient, ToolCall
+from app.llm.groq_client import ChatResponse, GroqClient, LlmUnavailable, ToolCall
 from app.skills.host import get_host
 from app.skills.manifest import load_vocabulary
 from app.skills.registry import get_registry
@@ -129,10 +129,10 @@ def _build_engine() -> FindingsEngine:
 class ChatOrchestrator:
     """Runs one exchange from beginning to end."""
 
-    def __init__(self, client: OllamaClient | None = None) -> None:
+    def __init__(self, client: GroqClient | None = None) -> None:
         # The client can be swapped for a stand-in during testing, which is how the
         # "no skill runs unless the model asks" proof is done without a real model.
-        self._client = client or OllamaClient()
+        self._client = client or GroqClient()
 
     def run_turn(self, user_message: str) -> TurnResult:
         """
@@ -140,7 +140,7 @@ class ChatOrchestrator:
 
         In: what they said. Out: a TurnResult describing everything that happened.
 
-        Raises OllamaUnavailable if the AI model cannot be reached. That is
+        Raises LlmUnavailable if the AI model cannot be reached. That is
         deliberate: no canned reply, no guessing (decision D-13).
         """
         settings = get_settings()

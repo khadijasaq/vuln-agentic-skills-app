@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 
 from app.chat.orchestrator import ChatOrchestrator
-from app.llm.ollama_client import ChatResponse
+from app.llm.groq_client import ChatResponse
 from app.skills import host as host_module
 from app.skills import registry as registry_module
 from app.skills.registry import SkillSource
@@ -237,7 +237,7 @@ class AskingModel:
         self.calls = 0
 
     def chat(self, messages, tools=None):
-        from app.llm.ollama_client import ToolCall
+        from app.llm.groq_client import ToolCall
 
         self.calls += 1
         if self.calls == 1:

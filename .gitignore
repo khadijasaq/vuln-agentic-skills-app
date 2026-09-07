@@ -2,6 +2,9 @@
 data/*
 !data/.gitkeep
 
+# API keys and secrets
+.env
+
 # Personal Claude Code settings
 .claude/settings.local.json
 

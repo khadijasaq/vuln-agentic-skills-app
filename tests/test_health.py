@@ -65,7 +65,7 @@ def test_health_includes_the_blocks_the_specification_promises(client):
     """
     payload = client.get("/api/health").json()
 
-    assert set(payload["ollama"]) == {"reachable", "model_present", "url"}
+    assert set(payload["llm"]) == {"reachable", "model_present", "url"}
     assert set(payload["counts"]) == {
         "skills",
         "installed",

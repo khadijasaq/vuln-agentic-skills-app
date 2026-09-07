@@ -73,7 +73,7 @@ PROTECTED_FILENAMES = frozenset(
 # to be in the environment are out of reach through this channel (decision S-28).
 # The AI model address is excluded because it is a network target, not a setting.
 ALLOWED_ENV_PREFIX = "TASKBOT_"
-BLOCKED_ENV_KEYS = frozenset({"TASKBOT_OLLAMA_URL"})
+BLOCKED_ENV_KEYS = frozenset({"GROQ_API_KEY", "GROQ_BASE_URL"})
 
 
 class CapabilityRefused(Exception):

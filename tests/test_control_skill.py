@@ -21,7 +21,7 @@ import pytest
 
 from app.chat.orchestrator import ChatOrchestrator
 from app.findings.markers import count_markers
-from app.llm.ollama_client import ChatResponse, ToolCall
+from app.llm.groq_client import ChatResponse, ToolCall
 from app.skills import host as host_module
 from app.skills import registry as registry_module
 from app.skills.host import SkillHost

@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 from app.api import schemas
 from app.chat.orchestrator import ChatOrchestrator
 from app.config import get_settings
-from app.llm.ollama_client import OllamaClient, OllamaUnavailable
+from app.llm.groq_client import GroqClient, LlmUnavailable
 from app.skills.registry import SkillInvalid, SkillNotFound, SkillRecord, get_registry
 from app.storage import store
 
@@ -96,7 +96,7 @@ def health() -> dict:
     settings = get_settings()
     registry = get_registry()
 
-    model_health = OllamaClient().health()
+    model_health = GroqClient().health()
 
     all_skills = registry.all()
 
@@ -105,7 +105,7 @@ def health() -> dict:
         # Permanent and deliberate: this is how TaskBot announces what it is.
         intentionally_vulnerable=True,
         model=settings.model,
-        ollama=schemas.OllamaHealth(
+        llm=schemas.LlmHealth(
             reachable=model_health.reachable,
             model_present=model_health.model_present,
             url=model_health.url,
@@ -244,7 +244,7 @@ def chat(request: Request, body: dict):
 
     try:
         result = ChatOrchestrator().run_turn(message)
-    except OllamaUnavailable as problem:
+    except LlmUnavailable as problem:
         # Loudly broken rather than quietly wrong. See decision D-13.
         return _error(
             "llm_unavailable",

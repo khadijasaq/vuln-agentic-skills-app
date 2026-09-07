@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.llm.ollama_client import ChatResponse, OllamaUnavailable, ToolCall
+from app.llm.groq_client import ChatResponse, LlmUnavailable, ToolCall
 from app.main import create_app
 from app.skills import host as host_module
 from app.skills import registry as registry_module
@@ -118,8 +118,8 @@ def test_a_missing_model_is_explained_with_the_command_that_fixes_it(client, mon
 
     class Broken:
         def chat(self, messages, tools=None):
-            raise OllamaUnavailable(
-                "unreachable", "Nothing is listening.", "ollama pull llama3.1:8b"
+            raise LlmUnavailable(
+                "unreachable", "Nothing is listening.", "Check Groq API connection"
             )
 
     monkeypatch.setattr(
@@ -130,7 +130,7 @@ def test_a_missing_model_is_explained_with_the_command_that_fixes_it(client, mon
     page = client.post("/chat", data={"message": "hello"}, follow_redirects=True)
 
     assert "The AI model is not available" in page.text
-    assert "ollama pull llama3.1:8b" in page.text
+    assert "Check Groq API connection" in page.text
 
 
 # --- The skill store -------------------------------------------------------------

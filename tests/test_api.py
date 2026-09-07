@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app.llm.ollama_client import ChatResponse, OllamaUnavailable, ToolCall
+from app.llm.groq_client import ChatResponse, LlmUnavailable, ToolCall
 from app.main import create_app
 from app.skills import host as host_module
 from app.skills import registry as registry_module
@@ -231,7 +231,7 @@ def test_a12_an_unavailable_model_is_reported_with_the_fix(client, monkeypatch):
 
     class Broken:
         def chat(self, messages, tools=None):
-            raise OllamaUnavailable("unreachable", "Nothing is listening.", "ollama serve")
+            raise LlmUnavailable("unreachable", "Nothing is listening.", "Check Groq API connection")
 
     monkeypatch.setattr(
         "app.chat.orchestrator.ChatOrchestrator.__init__",
@@ -243,7 +243,7 @@ def test_a12_an_unavailable_model_is_reported_with_the_fix(client, monkeypatch):
     assert response.status_code == 503
     payload = response.json()
     assert payload["error"] == "llm_unavailable"
-    assert payload["remedy"] == "ollama serve"
+    assert payload["remedy"] == "Check Groq API connection"
 
 
 def test_a12_the_read_only_pages_still_work_without_a_model(client):

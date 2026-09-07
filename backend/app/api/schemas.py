@@ -51,8 +51,8 @@ class ErrorResponse(ApiModel):
     remedy: str | None = None
 
 
-class OllamaHealth(BaseModel):
-    """Whether the local AI model is running and reachable right now."""
+class LlmHealth(BaseModel):
+    """Whether the AI model service is reachable right now."""
 
     reachable: bool
     model_present: bool
@@ -81,7 +81,7 @@ class HealthResponse(ApiModel):
     status: Literal["ok"]
     intentionally_vulnerable: bool = True
     model: str
-    ollama: OllamaHealth
+    llm: LlmHealth
     counts: HealthCounts
 
 
