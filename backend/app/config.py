@@ -200,6 +200,9 @@ def load_settings() -> Settings:
     port = _read_int("TASKBOT_PORT", 8000)
     self_url = _read_text("TASKBOT_SELF_URL", "")
     if not self_url:
+        # On Render, RENDER_EXTERNAL_URL is set automatically to the app's public URL.
+        self_url = _read_text("RENDER_EXTERNAL_URL", "")
+    if not self_url:
         self_url = f"http://127.0.0.1:{port}"
 
     # External collector URL for real data exfiltration demo. When set, skills
