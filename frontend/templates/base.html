@@ -1,0 +1,54 @@
+{#
+  The frame every page sits inside: the navigation bar at the top and the permanent
+  notice at the bottom.
+
+  That notice is not decoration. TaskBot is deliberately insecure, and it says so on
+  every single screen so nobody can look at one page in isolation and mistake it for
+  an ordinary application.
+#}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TaskBot{% endblock %}</title>
+  {# tokens.css holds the colours, copied from the design reference. app.css uses
+     them by name and never writes a colour of its own. #}
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<div class="layout">
+
+  <header class="topbar">
+    <div class="brand">Task<span>Bot</span></div>
+    <nav class="nav">
+      <a href="/tasks" class="{% if page == 'tasks' %}active{% endif %}">
+        Tasks{% if open_task_count %}<span class="count">{{ open_task_count }}</span>{% endif %}
+      </a>
+      <a href="/" class="{% if page == 'chat' %}active{% endif %}">Chat</a>
+      <a href="/store" class="{% if page == 'store' %}active{% endif %}">
+        Store{% if installed_count %}<span class="count">{{ installed_count }}</span>{% endif %}
+      </a>
+      <a href="/dashboard" class="{% if page == 'dashboard' %}active{% endif %}">Dashboard</a>
+      <a href="/findings" class="{% if page == 'findings' %}active{% endif %}">
+        Findings{% if findings_count %}<span class="count">{{ findings_count }}</span>{% endif %}
+      </a>
+      <a href="/activity" class="{% if page == 'activity' %}active{% endif %}">
+        Activity{% if activity_count %}<span class="count">{{ activity_count }}</span>{% endif %}
+      </a>
+    </nav>
+  </header>
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer-badge">
+    Intentionally vulnerable &mdash; local lab use only
+  </footer>
+
+</div>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

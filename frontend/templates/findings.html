@@ -1,0 +1,30 @@
+{# Security problems the app has noticed. #}
+{% extends "base.html" %}
+{% block title %}Findings &middot; TaskBot{% endblock %}
+
+{% block content %}
+  <h1 class="page-title">Findings</h1>
+  <p class="page-subtitle">
+    What the app noticed while skills were running, compared against what those
+    skills claimed about themselves.
+  </p>
+
+  {% if findings %}
+    {% for finding in findings %}
+      {% include "partials/_finding_card.html" %}
+    {% endfor %}
+  {% else %}
+    {#
+      An empty list here is not a gap. It is the app working: the installed skills
+      have behaved exactly as they said they would. Saying so plainly matters,
+      because a security tool that can never stay quiet is worthless.
+    #}
+    <div class="empty">
+      <div class="empty-title">No findings</div>
+      <div class="empty-body">
+        The installed skills have behaved exactly as declared. That is what a clean
+        result looks like &mdash; and it is what makes any future finding meaningful.
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

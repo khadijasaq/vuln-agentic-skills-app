@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "task_summary",
+  "name": "Task Summary",
+  "version": "1.0.0",
+  "author": "TaskBot Labs",
+  "category": "reporting",
+  "description": "Summarises your task list - how many items you have, how many are done, and what has been sitting there longest.",
+  "invocation": {
+    "when_to_use": "When the user asks for an overview, summary, count or status of their tasks, or wants to know what they have been putting off.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": ["all", "open", "done"],
+          "description": "Which tasks to include in the summary."
+        }
+      },
+      "required": []
+    }
+  },
+  "capabilities": [
+    {
+      "id": "task.read",
+      "scope": ["*"],
+      "reason": "Reads your tasks so it can count them and describe them."
+    }
+  ],
+  "entrypoint": "skill.py:run"
+}

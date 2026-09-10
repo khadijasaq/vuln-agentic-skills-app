@@ -1,0 +1,657 @@
+/*
+ * How TaskBot looks.
+ *
+ * ONE RULE GOVERNS THIS WHOLE FILE: no colour is ever written out directly here.
+ * Every colour is referred to by one of the names defined in tokens.css, which is
+ * copied straight from the design reference. That way the app and the design can
+ * never quietly drift apart, and an automated check can prove it by searching this
+ * file for colour values and finding none.
+ *
+ * The look is deliberately finished rather than plain. TaskBot has to read as a
+ * real small product, because vulnerabilities demonstrated inside something that
+ * looks like a test harness read as toys.
+ */
+
+/* The typeface, served from this machine so the app works with no internet. */
+@font-face {
+  font-family: 'Raleway';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/raleway.woff2') format('woff2');
+}
+
+/* --- Foundations -------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--p-300);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+/* --- Page frame --------------------------------------------------------------- */
+
+.layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  padding: 16px 0;
+  color: var(--text);
+}
+
+.brand span {
+  background: var(--grad-accent-text, var(--grad-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.nav {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.nav a {
+  padding: 16px 14px;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.nav a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav a.active {
+  color: var(--text);
+  border-bottom-color: var(--p-default);
+}
+
+.nav .count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+  color: var(--text-muted);
+  margin: 0 0 28px;
+  font-size: 14px;
+}
+
+/* The permanent notice at the foot of every page. */
+.footer-badge {
+  border-top: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-dim);
+  text-align: center;
+  padding: 14px 24px;
+  font-size: 12px;
+  font-family: var(--mono);
+}
+
+/* --- Cards -------------------------------------------------------------------- */
+
+.card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 18px 20px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-2);
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.card-meta {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-family: var(--mono);
+}
+
+.card-body {
+  color: var(--text-2);
+  margin: 10px 0 0;
+}
+
+.card.disabled {
+  opacity: 0.6;
+}
+
+/* --- Buttons ------------------------------------------------------------------ */
+
+.btn {
+  display: inline-block;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text);
+  border-radius: var(--r-sm);
+  padding: 8px 16px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--surface-1);
+  border-color: var(--p-700);
+}
+
+.btn-primary {
+  background: var(--grad-button);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.1);
+}
+
+/* A quieter button for actions that should not shout, like removing one task. */
+.btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.btn-quiet:hover {
+  background: var(--surface-3);
+  border-color: var(--border);
+  color: var(--danger);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* --- The task list ------------------------------------------------------------ */
+/*
+ * The screen TaskBot exists for. Unfinished items first, each with a tick box, the
+ * text, and a quiet remove button.
+ */
+
+.task-list {
+  margin-top: 20px;
+}
+
+.task {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.task:hover {
+  border-color: var(--border-strong);
+}
+
+/* A finished task fades back so the outstanding ones stand out. */
+.task-done {
+  opacity: 0.55;
+}
+
+.task-done .task-title {
+  text-decoration: line-through;
+}
+
+.task-tick {
+  display: flex;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.tick {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.tick:hover {
+  border-color: var(--p-400);
+}
+
+.tick-on {
+  background: var(--grad-button);
+  border-color: transparent;
+}
+
+.task-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-title {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.task-notes {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.task-when {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: var(--mono);
+  margin-top: 5px;
+}
+
+/* --- The declared-permission list --------------------------------------------- */
+/*
+ * Shown in the skill store, exactly as the skill's author wrote it. The caption
+ * above it saying "declared by the publisher" is deliberate: the trust assumption
+ * that a dishonest skill exploits should be visible on the screen, not hidden in
+ * the code.
+ */
+
+.declared {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.declared-caption {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.capability {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  margin-bottom: 6px;
+}
+
+.capability .cap-id {
+  color: var(--p-300);
+}
+
+.capability .cap-scope {
+  color: var(--text-muted);
+}
+
+.capability .cap-reason {
+  display: block;
+  color: var(--text-dim);
+  font-family: var(--sans);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+/* --- Severity badges ---------------------------------------------------------- */
+/*
+ * Never colour alone: every badge carries its severity word and its risk
+ * identifier, so the meaning survives for anyone who cannot distinguish the colours.
+ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--r-pill);
+  padding: 3px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--mono);
+  border: 1px solid currentColor;
+}
+
+.badge-critical { color: var(--sev-critical); }
+.badge-high     { color: var(--sev-high); }
+.badge-medium   { color: var(--sev-medium); }
+.badge-low      { color: var(--sev-low); }
+.badge-info     { color: var(--sev-info); }
+
+.badge .ast {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* --- Chat --------------------------------------------------------------------- */
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.msg {
+  max-width: 78%;
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+}
+
+.msg-user {
+  align-self: flex-end;
+  background: var(--p-950);
+}
+
+.msg-bot {
+  align-self: flex-start;
+  background: var(--surface-2);
+}
+
+.msg-who {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+/* The small tag showing which skill handled a message. */
+.skill-chip {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--p-300);
+}
+
+.composer {
+  display: flex;
+  gap: 10px;
+}
+
+.composer input {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+}
+
+.composer input:focus {
+  outline: none;
+  border-color: var(--p-600);
+}
+
+/* --- Notices ------------------------------------------------------------------ */
+
+.notice {
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+}
+
+.notice-error {
+  border-color: var(--danger);
+}
+
+.notice-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.notice pre {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--canvas);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  overflow-x: auto;
+}
+
+/* --- Activity ----------------------------------------------------------------- */
+
+.activity-row {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--r-md);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+/* An exchange where something was reported gets a red edge, so the interesting
+   rows are findable at a glance. */
+.activity-row.flagged {
+  border-left-color: var(--danger);
+}
+
+.activity-head {
+  padding: 14px 16px;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.activity-head:hover {
+  background: var(--surface-3);
+}
+
+.activity-when {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.activity-what {
+  flex: 1;
+}
+
+.activity-detail {
+  display: none;
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.activity-row.open .activity-detail {
+  display: block;
+}
+
+.detail-label {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 14px 0 6px;
+}
+
+table.observations {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+table.observations th {
+  text-align: left;
+  color: var(--text-dim);
+  font-weight: 500;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+table.observations td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+}
+
+.outcome-ok      { color: var(--success); }
+.outcome-refused { color: var(--warning); }
+.outcome-error   { color: var(--danger); }
+
+/* --- Empty states ------------------------------------------------------------- */
+/*
+ * These matter more than usual here. An empty findings list is not a gap in the
+ * product - it is the product working. The wording says so.
+ */
+
+.empty {
+  text-align: center;
+  padding: 56px 24px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.empty-body {
+  color: var(--text-muted);
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+/* --- Small helpers ------------------------------------------------------------ */
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+.error-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+pre.block {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 12px;
+  overflow-x: auto;
+  color: var(--text-2);
+}

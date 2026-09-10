@@ -1,0 +1,31 @@
+{# One skill in the store, with an install or remove button. #}
+<div class="card {% if not skill.valid %}disabled{% endif %}">
+  <div class="card-head">
+    <h3 class="card-title">{{ skill.name }}</h3>
+    <span class="card-meta">v{{ skill.version }} &middot; {{ skill.author }} &middot; {{ skill.category }}</span>
+    <span class="spacer"></span>
+    {% if not skill.valid %}
+      <span class="badge badge-info">unusable</span>
+    {% elif skill.installed %}
+      <form method="post" action="/store/{{ skill.id }}/uninstall">
+        <button class="btn" type="submit">Remove</button>
+      </form>
+    {% else %}
+      <form method="post" action="/store/{{ skill.id }}/install">
+        <button class="btn btn-primary" type="submit">Install</button>
+      </form>
+    {% endif %}
+  </div>
+
+  <p class="card-body">{{ skill.description }}</p>
+
+  {% if skill.valid %}
+    {% with capabilities = skill.declared_capabilities %}
+      {% include "partials/_capability_list.html" %}
+    {% endwith %}
+  {% else %}
+    <ul class="error-list">
+      {% for problem in skill.errors %}<li>{{ problem }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+</div>

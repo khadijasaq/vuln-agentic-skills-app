@@ -1,0 +1,31 @@
+# Line-ending rules.
+#
+# Almost nothing in this repository cares how its lines end. Two files care a great
+# deal, and they are the reason this file exists.
+#
+# THE PUBLISHED COMPONENTS ARE FINGERPRINTED BY THEIR EXACT BYTES.
+#
+# The AST02 weakness works by comparing a fingerprint a skill wrote down in advance
+# against a fingerprint the app takes of what was actually delivered. The mock registry
+# serves these files byte for byte, untouched, precisely so that the fingerprint is a
+# fact about what is in this repository rather than about how some encoder happened to
+# format it on the way out.
+#
+# That makes their bytes load-bearing. If Git rewrote their line endings on checkout -
+# which it does by default on Windows - every byte after the first line would shift, the
+# fingerprint would change, and the pin recorded in the skill's manifest would stop
+# matching. The visible symptom would be alarming and misleading: the weakness would
+# become PERMANENT rather than switchable, because putting the honest component back
+# would no longer produce silence.
+#
+# "-text" tells Git never to convert these files in either direction. What is committed
+# is what lands on disk, on every machine.
+#
+# Two tests would catch it if this were ever removed, so the failure is loud rather than
+# silent - but preventing it is better than detecting it:
+#   test_time_budget_skill.py::test_the_pinned_fingerprint_matches_the_reviewed_build
+#   test_time_budget_e2e.py::test_the_agreed_component_raises_nothing_at_all
+#
+# See vulnerabilities/ast02-supply-chain/registry/README.md for the fingerprint recipe.
+
+vulnerabilities/ast02-supply-chain/registry/*.json -text

@@ -1,0 +1,22 @@
+{#
+  The permissions a skill claims to need.
+
+  Shown EXACTLY as the skill's author wrote them, with no checking and no comment.
+  That is the honest representation - a manifest is only ever a claim - and the
+  caption above says so plainly. The trust assumption that a dishonest skill relies
+  on belongs on the screen, not buried in the code.
+#}
+<div class="declared">
+  <div class="declared-caption">Declared by the publisher</div>
+  {% if capabilities %}
+    {% for capability in capabilities %}
+      <div class="capability">
+        <span class="cap-id">{{ capability.id }}</span>
+        <span class="cap-scope">{{ capability.scope | join(', ') }}</span>
+        <span class="cap-reason">{{ capability.reason }}</span>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="capability dim">This skill claims to need no permissions at all.</div>
+  {% endif %}
+</div>

@@ -1,0 +1,53 @@
+{# The main screen: talking to the assistant. #}
+{% extends "base.html" %}
+{% block title %}TaskBot{% endblock %}
+
+{% block content %}
+  <h1 class="page-title">Chat</h1>
+  <p class="page-subtitle">Ask TaskBot about your to-do list, or tell it something to remember.</p>
+
+  {% if error %}
+    {#
+      Shown when the AI model is not running. We say exactly what is wrong and the
+      command that fixes it, rather than quietly pretending to answer - a made-up
+      reply would make a demonstration look like it worked when nothing did.
+    #}
+    <div class="notice notice-error">
+      <div class="notice-title">The AI model is not available</div>
+      <div class="muted">{{ error.detail }}</div>
+      <pre>{{ error.remedy }}</pre>
+    </div>
+  {% endif %}
+
+  {% if messages %}
+    <div class="messages">
+      {% for entry in messages %}
+        <div class="msg msg-user">
+          <div class="msg-who">You</div>
+          {{ entry.user_message }}
+        </div>
+        <div class="msg msg-bot">
+          <div class="msg-who">TaskBot</div>
+          {{ entry.reply }}
+          {% if entry.skill_invoked %}
+            <a class="skill-chip" href="/activity#{{ entry.id }}">
+              handled by {{ entry.skill_invoked.skill_id }}
+            </a>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-title">Nothing said yet</div>
+      <div class="empty-body">
+        Try &ldquo;what&rsquo;s on my list?&rdquo; or &ldquo;remind me to book the dentist&rdquo;.
+      </div>
+    </div>
+  {% endif %}
+
+  <form class="composer" method="post" action="/chat">
+    <input type="text" name="message" placeholder="Say something to TaskBot..." autocomplete="off" required>
+    <button class="btn btn-primary" type="submit">Send</button>
+  </form>
+{% endblock %}

@@ -1,0 +1,29 @@
+{#
+  The skill store.
+
+  Each skill is shown exactly as its author describes it, including the permissions
+  it claims to need. Nothing here is verified - and that is the honest presentation,
+  because a description is only ever a claim. The whole point of this exercise is
+  what happens when that claim is untrue.
+#}
+{% extends "base.html" %}
+{% block title %}Skills &middot; TaskBot{% endblock %}
+
+{% block content %}
+  <h1 class="page-title">Skill store</h1>
+  <p class="page-subtitle">
+    Install a skill to give TaskBot a new ability. Everything below is what the
+    publisher says about their own skill.
+  </p>
+
+  {% if skills %}
+    {% for skill in skills %}
+      {% include "partials/_skill_card.html" %}
+    {% endfor %}
+  {% else %}
+    <div class="empty">
+      <div class="empty-title">No skills found</div>
+      <div class="empty-body">Nothing is installed in the skills folder yet.</div>
+    </div>
+  {% endif %}
+{% endblock %}

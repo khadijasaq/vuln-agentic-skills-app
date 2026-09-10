@@ -1,0 +1,28 @@
+{#
+  The record of every exchange.
+
+  This is the demonstration screen: install a skill, ask something ordinary, and
+  then watch here as the assistant chooses it and the app records everything it
+  touched. Click any row to open the detail.
+#}
+{% extends "base.html" %}
+{% block title %}Activity &middot; TaskBot{% endblock %}
+
+{% block content %}
+  <h1 class="page-title">Activity</h1>
+  <p class="page-subtitle">
+    Every exchange, newest first. Rows with a red edge are ones where the app
+    reported a problem.
+  </p>
+
+  {% if entries %}
+    {% for entry in entries %}
+      {% include "partials/_activity_row.html" %}
+    {% endfor %}
+  {% else %}
+    <div class="empty">
+      <div class="empty-title">Nothing has happened yet</div>
+      <div class="empty-body">Say something to TaskBot and it will appear here.</div>
+    </div>
+  {% endif %}
+{% endblock %}

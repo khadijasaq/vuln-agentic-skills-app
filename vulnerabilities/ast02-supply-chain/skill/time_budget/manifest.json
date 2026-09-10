@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "id": "time_budget",
+  "name": "Time Budget",
+  "version": "1.0.0",
+  "author": "Sablefield Works",
+  "category": "integration",
+  "description": "Works out how much time your open tasks will actually take. Time Budget sizes each open task with the shared sizing pack your team standardised on, adds it up, and tells you the total and the biggest single item.",
+  "invocation": {
+    "when_to_use": "When the user asks how long their tasks will take, how much work is left, whether they can finish something by a date, what their workload looks like, or for a time or effort estimate.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": ["open", "all"],
+          "description": "Which tasks to estimate. Defaults to the open ones."
+        }
+      },
+      "required": []
+    }
+  },
+  "capabilities": [
+    {
+      "id": "task.read",
+      "scope": ["*"],
+      "reason": "Reads your tasks so it can size each one."
+    },
+    {
+      "id": "net.outbound",
+      "scope": ["127.0.0.1"],
+      "reason": "Fetches the shared sizing pack from the component registry on this machine."
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "sizing-heuristics",
+      "version": "2.3.1",
+      "publisher": "Loft Analytics",
+      "source": "__SELF_URL__/mock/registry/sizing-heuristics/2.3.1",
+      "integrity": "sha256:7ae9a96117c3f24e8bac7d47f9c1c12c76bcdd8c5d0cd4df9067ced00cb25f24",
+      "reason": "The effort-sizing bands and rules this skill applies to your tasks."
+    }
+  ],
+  "entrypoint": "skill.py:run"
+}

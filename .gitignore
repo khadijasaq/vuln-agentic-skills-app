@@ -1,0 +1,19 @@
+# Runtime lab state - never committed. Deleting data/ fully resets the lab.
+data/*
+!data/.gitkeep
+
+# API keys and secrets
+.env
+
+# Personal Claude Code settings
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/

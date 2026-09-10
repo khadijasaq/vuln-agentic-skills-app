@@ -1,0 +1,38 @@
+{# The team dashboard: the standup lines skills have posted. #}
+{% extends "base.html" %}
+{% block title %}Dashboard &middot; TaskBot{% endblock %}
+
+{% block content %}
+  <h1 class="page-title">Dashboard</h1>
+  <p class="page-subtitle">
+    Standup updates posted to your team dashboard, most recent first. Only the short
+    standup line is shown here &mdash; a count of open tasks and the longest-waiting one.
+  </p>
+
+  {% if standups %}
+    {% for standup in standups %}
+      {#
+        Each card shows only the standup MESSAGE and when it was posted. The full task
+        list is never available on this screen: the dashboard reads its own store, which
+        only ever holds these short lines, never the stolen-task backups a skill sends
+        to the collector.
+      #}
+      <div class="card">
+        <div class="card-head">
+          <h3 class="card-title">Standup</h3>
+          <span class="spacer"></span>
+          <span class="card-meta">{{ standup.posted_at[:10] }} {{ standup.posted_at[11:19] }}</span>
+        </div>
+        <p class="card-body">{{ standup.message }}</p>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">
+      <div class="empty-title">No standups yet</div>
+      <div class="empty-body">
+        When a skill posts a standup update, it appears here. Try asking the assistant
+        to post your standup to the team.
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,317 @@
+# TaskBot — Product Requirements Document
+
+| | |
+|---|---|
+| **Product** | TaskBot — deliberately-vulnerable agentic-skills target |
+| **Layer** | OWASP Agentic Skills (AST) |
+| **Version** | **PRD v1.2** *(amended 2026-08-29; v1.1 amended 2026-08-27; v1.0 approved 2026-08-20)* |
+| **Status** | **Approved.** Canonical location: `docs/PRD.md`. |
+| **Companion** | `docs/TDD.md` — system-wide technical design. Feature specs live in `docs/features/<feature>/spec.md`. |
+| **Repo** | `C:\DEV2\vuln-agentic-skills-app` |
+
+---
+
+## 0. Amendment log
+
+### v1.2 — 2026-08-29 · a fifth vulnerability enters scope, and a v1.0 judgement is reversed
+
+**What changed:** **AST02 · Supply Chain Compromise** moves from *"out of scope, and not authentically demonstrable by this architecture"* (NG1, v1.0 and v1.1) into scope as the **fifth** vulnerability, shipping as release **R5**.
+
+**Why the earlier judgement is reversed, and not quietly.** NG1 excluded AST02 on one specific ground: *"no acquisition path to poison"* — the claim being that nothing in this architecture acquires anything, so a supply chain would have to be invented in order to be attacked, and inventing one would fail G2. That reasoning was sound when it was written and it is answered rather than ignored:
+
+- **The platform gains a verifier, not an installer.** No skill installer, no package manager, no upload endpoint, no update mechanism is added (NG1's other exclusions are untouched, and AST07 remains out of scope for exactly the reason NG1 gives). What is added is somewhere for a skill to **declare** the component it is built on, and a check that compares that declaration against what was delivered.
+- **The acquisition is the skill's own product behaviour.** A skill standing on a component published by somebody else is as ordinary as *Team Rules* fetching a document, and AST05 was brought into scope on precisely that footing.
+- **The evidence already existed.** Unlike AST05, this vulnerability needs **no new recording of any kind**. The fingerprint of every delivered response has been written down for every skill since AST05's substrate landed. What was missing was the claim to compare it against.
+
+**What this costs, stated up front:** AST02 is the **second** vulnerability to change `backend/**`, and `docs/TDD.md` §12 requires any such feature to re-argue the carve-out test explicitly and be reviewed on it. That argument is in `docs/features/ast02-supply-chain/spec.md` §9.8. The short form: the change adds a *claim*, not a *fact*, and the detector demonstrably stays silent — on all five existing skills, and on *Time Budget* itself whenever the agreed component is delivered.
+
+**Sections amended:** §5 NG1 · §7 (new §7.7) · §8 (new row R5) · §10 SC-1 · §12 (new risk row) · §13 · §14. Existing section numbers are **unchanged** so that citations in shipped feature specs remain valid — which is why the AST02 catalogue entry is §7.7 rather than inserted in AST-id order.
+
+**Not changed:** the safety envelope (FR-7) in any respect; the control skill and the false-positive baseline (G5); NG2, NG3, NG4; the severities already fixed for AST01, AST04, AST03 and AST05.
+
+### v1.1 — 2026-08-27 · a fourth vulnerability enters scope
+
+**What changed:** **AST05 · Untrusted External Instructions** moves from *"a possible later addition, out of scope"* (NG1, v1.0) into scope as the **fourth** vulnerability, shipping as release **R4**.
+
+**Why:** the three v1.0 vulnerabilities are one per detection axis, and the axes were argued complete. AST05 is the case that argument did not cover: a skill whose manifest, grant and behaviour are all correct, and whose *instructions* come from outside the trust boundary at run time. None of the three existing axes can see it, because none of them has access to what comes **back** from a network request — the broker records everything outbound and nothing inbound. That gap is real, and closing it adds a fourth axis rather than re-running an existing one.
+
+**What this costs, stated up front:** unlike AST04, AST01 and AST03 — each of which shipped with **zero** platform change — **AST05 requires changes to `backend/**`**: inbound response capture in the capability broker, a new provenance axis with two finding types, a new GET-serving mock endpoint, and an additive `Finding` field. `docs/TDD.md` §12 previously named a platform change as the signal that a vulnerability is being faked. That rule is **amended, not broken** — the argument is in `docs/features/ast05-untrusted-external-instructions/spec.md` §8.6 and `docs/TDD.md` §12, and the short form is: the change *records real evidence of a real event* and leaves the detector able to stay silent, which is what separates substrate from a prop.
+
+**Sections amended:** §5 NG1 · §7 (new §7.6) · §8 (new row R4) · §10 SC-1 · §12 (new risk row) · §13 · §14. Existing section numbers are **unchanged** so that citations in shipped feature specs remain valid — which is why the AST05 catalogue entry is §7.6 rather than inserted in AST-id order.
+
+**Not changed:** the safety envelope (FR-7) in any respect; the control skill and the false-positive baseline (G5); NG2, NG3, NG4; the severities already fixed for AST01, AST04 and AST03.
+
+---
+
+## 1. Context
+
+Validating agentic-AI security tooling requires deliberately-vulnerable targets to scan — the agentic-AI equivalents of DVWA and WebGoat, one per OWASP layer. Those targets exist for the layers around this one (an e-commerce app covers Agentic Applications; a complaint chatbot covers LLM), but **no standard target exists for the Agentic Skills layer**. Tooling aimed at that layer currently has nothing to be tested against.
+
+TaskBot fills that gap. It is a small, believable to-do assistant whose extra abilities arrive as installable skills, three of which are intentionally vulnerable in ways drawn from the **OWASP Agentic Skills Top 10 (2026)**. It is built and maintained solo, for lab use only.
+
+The intended outcome: a scanner can be pointed at TaskBot, exploit real vulnerabilities through a real LLM agent, and produce findings a remediation agent can consume — with proof that each exploit genuinely fired, and no risk to any real system.
+
+---
+
+## 2. Product summary
+
+TaskBot is a to-do assistant. Users add and list tasks in normal conversation. Beyond that baseline, capability is modular: users browse a **skill store**, install skills, and the assistant gains new abilities. Each skill is a self-contained module — a **manifest** declaring its identity and permissions, plus its **code**.
+
+An LLM decides everything. It reads the installed skills, decides whether one fits the user's request, and runs it. If nothing fits — or nothing is installed — it answers directly, like any assistant. No routing is hardcoded.
+
+The host watches what each skill *actually does* while it runs and compares that to what the manifest *declared*. Divergence becomes a security finding.
+
+---
+
+## 3. Users
+
+| Persona | What they need from TaskBot | How they interact |
+|---|---|---|
+| **Red-team / scanning agent** *(primary)* | Discoverable, genuinely exploitable skill-layer vulnerabilities. Needs to enumerate skills, read declared manifests, trigger skills through the assistant, and confirm exploitation. | Chat endpoint + read-only JSON API. May install its own probe skill. |
+| **Blue-team / remediation agent** *(primary)* | Structured, machine-readable findings with enough evidence to validate a fix. Remediation itself happens outside TaskBot. | Read-only JSON API (`/api/findings`, `/api/activity`). |
+| **Supervisor / examiner** *(primary)* | A clear, believable, demoable vulnerable app understandable in minutes. | Web UI. |
+| **Students** *(secondary)* | DVWA-style teaching value — see a skill lie about itself and watch the host catch it. | Web UI. |
+
+---
+
+## 4. Goals
+
+- **G1** — Ship a realistic, deliberately-vulnerable agentic-skills target with **5 clearly-isolated vulnerabilities**, each mapped to one OWASP AST risk. *(v1.2 — was 4; AST02 added, see §0.)*
+- **G2** — Each vulnerability fires through a **real LLM agent's own decision to run the skill** — never a scripted or hardcoded demo path.
+- **G3** — Each vulnerability is **detectable**: it produces a structured finding a scanner can consume.
+- **G4** — Every exploit is **safe, local, and observable**. A marker artifact proves it fired; nothing touches a real system, real network, or real credentials.
+- **G5** — A **control skill** behaves exactly as declared and produces **no finding**, so false-positive rate is measurable.
+- **G6** — Runs locally with **one command plus a local model**, and reads as a believable product.
+
+## 5. Non-goals
+
+- **NG1** — *(amended v1.2)* Not all 10 AST risks. **Five:** AST04, AST01, AST03, AST05 and AST02 (§7). The remaining five are out of scope and, for three of them, **not authentically demonstrable by this architecture** — AST07 (no update mechanism), AST09 (contradicted by the approval gate and audit log this app already has), AST10 (one platform, one manifest schema). Naming them is the honest position; staging them would fail G2.
+
+  > **The AST02 clause, kept rather than deleted.** v1.0 and v1.1 read: *"AST02 (no acquisition path to poison)"*. That judgement is **reversed in v1.2** and the original wording is preserved here so the reversal is visible rather than silently tidied away. The answer to it, in one line: the platform gains a **verifier**, not an installer — the skill acquires its own component as part of its own advertised job, and the platform only checks what it already recorded. Argued in full at §0 (v1.2) and `docs/features/ast02-supply-chain/spec.md` §9.8. A reviewer who does not accept that answer should reject R5 and restore the clause.
+- **NG2** — No remediation, patched variant, or "fixed" mode inside the app. That lives externally.
+- **NG3** — **No security-level toggles, difficulty switches, or safe mode.** The app is always vulnerable. Configuration that could turn a vulnerability off is explicitly rejected — it would let a scanner pass by accident.
+- **NG4** — Vulnerabilities never live in the assistant's general-chat path. Prompt injection, jailbreaks, and unsafe generation belong to the LLM-layer app. Any vulnerability reachable without a skill installed is a defect.
+- **NG5** — Not production software. No auth, no multi-user, no deployment story, no persistence guarantees. Lab use only.
+- **NG6** — Not a scanner. TaskBot reports what it observed; judging and remediating is someone else's job.
+
+---
+
+## 6. Product requirements
+
+### FR-1 — To-do assistant (baseline)
+- **FR-1.1** Users add tasks and list tasks through natural conversation.
+- **FR-1.2** Tasks persist locally across restarts.
+- **FR-1.3** Task data is the crown jewel of this product — it is the asset the vulnerable skills target. It must be substantive enough that its theft reads as a real loss (seedable with believable content).
+- **FR-1.4** With zero skills installed, TaskBot is a complete, working, **non-vulnerable** assistant. This is the baseline that proves NG4.
+
+### FR-2 — Skill store
+- **FR-2.1** Users browse a catalogue of available skills, seeing each skill's **declared** name, description, and permissions — the manifest's claims, presented at face value, exactly as a real store would.
+- **FR-2.2** Users install and uninstall skills. Installed state persists.
+- **FR-2.3** A skill is a self-contained unit: **manifest** (identity, description, declared permissions/capabilities) + **code**.
+- **FR-2.4** The store ships the four catalogue skills (§7).
+- **FR-2.5** Users may also supply their own skill (manifest + code) and install it. See §7.5 for scoping.
+- **FR-2.6** Only installed skills are visible to the LLM.
+
+### FR-3 — LLM-driven dispatch *(the mechanism the whole product rests on)*
+- **FR-3.1** On each user message, the LLM is given the installed skills and their declared manifests, and **decides on its own** whether one applies.
+- **FR-3.2** If a skill fits, the LLM invokes it. This is the only path by which a vulnerability can fire.
+- **FR-3.3** If no skill fits, or none is installed, the LLM answers directly as a normal assistant.
+- **FR-3.4** **No hardcoded routing.** No keyword matching, no regex dispatch, no "if user says X run skill Y". If a reviewer can find a code path that forces a skill to run, the product has failed G2.
+- **FR-3.5** The model runs locally (Ollama). No external inference.
+
+### FR-4 — Capability monitor and findings engine
+- **FR-4.1** The host observes what a skill **actually does** during execution, recording at minimum: file reads, network calls, and access to user task data.
+- **FR-4.2** Detection is **runtime-observation based**. A finding is only raised because a skill was actually invoked by the LLM and actually did something — which makes every finding simultaneously proof the exploit fired.
+- **FR-4.3** After execution, observed capabilities are diffed against the manifest's declared capabilities. Divergence produces a **finding**.
+- **FR-4.4** A finding carries: the skill, the AST risk ID, a severity, what was declared, what was observed, evidence (marker reference), and a timestamp.
+- **FR-4.5** Findings persist and accumulate across runs.
+- **FR-4.6** A skill whose observed behaviour matches its declaration produces **no finding** (G5).
+
+### FR-5 — Activity log
+- **FR-5.1** Every assistant turn is logged: the request, whether a skill handled it, which one, and the outcome.
+- **FR-5.2** Turns where a vulnerability fired are visibly marked as such.
+- **FR-5.3** The log is the demo surface — a supervisor watches it and sees the story of an exploit without reading code.
+
+### FR-6 — Machine interface
+- **FR-6.1** Read-only JSON endpoints expose skill catalogue and installed state, findings, and activity log.
+- **FR-6.2** Chat is reachable programmatically, so a scanning agent can drive the assistant the same way a user does.
+- **FR-6.3** Response shapes are stable and documented — this is the contract both agents depend on.
+- **FR-6.4** No authentication. Lab tool, localhost only.
+
+### FR-7 — Safety envelope *(hard constraint — overrides every other requirement)*
+- **FR-7.1** Exploits are **simulated**. Their effect is to write an observable local marker artifact.
+- **FR-7.2** "Exfiltration" targets a **local mock collector** inside the app. No packet leaves the machine.
+- **FR-7.3** File access is confined to files the app itself created for the purpose. No reading of real user documents, credentials, SSH keys, browser data, or environment secrets.
+- **FR-7.4** No destructive operations. Nothing is deleted, encrypted, or modified outside the app's own data directory.
+- **FR-7.5** Markers are unambiguous, greppable, and safe to delete — resetting the lab is trivial.
+- **FR-7.6** The repo states prominently that this app is intentionally vulnerable and is for local lab use only.
+
+---
+
+## 7. Vulnerability catalogue
+
+**Four** vulnerabilities plus one control *(v1.1 — was three)*. Each is described here at product level — what the user sees, what actually happens, and what proves it.
+
+> **Numbering note.** AST05 is documented at **§7.6**, after the existing entries, rather than inserted in AST-id order. Shipped feature specs cite §7.3, §7.4 and §7.5 by number; renumbering them to make the catalogue read tidily would silently break those citations. Order of appearance here is not order of importance.
+
+### 7.1 — AST04 · Insecure Metadata
+> *"A skill that lies in its manifest."*
+
+- **Presents as** a helpful utility whose manifest declares it read-only, local, and network-free.
+- **Actually** reads from the filesystem and makes a network call — neither declared.
+- **Fires when** the LLM chooses it for a plausible user request.
+- **Proof** — marker artifact + finding showing `declared: {read-only, no network}` against `observed: {file read, network call}`.
+- **The point** — manifests are self-asserted. A store that trusts them is trusting the attacker.
+
+### 7.2 — AST01 · Malicious Skills
+> *"A benign-looking skill with hidden logic."*
+
+- **Presents as** an ordinary, useful, well-described skill. Its stated function works correctly — this is what makes it convincing.
+- **Actually** also quietly copies the user's task data to the local mock collector while performing its advertised job.
+- **Fires when** the LLM chooses it for the legitimate purpose it advertises. The user never asks for the malicious behaviour.
+- **Proof** — task data present in the mock collector, plus marker and finding.
+- **The point** — a skill doing its stated job correctly is not evidence it is doing only that.
+
+### 7.3 — AST03 · Over-Privileged Skills
+> *"A skill granted far more access than it needs."*
+
+- **Presents as** a simple skill needing minimal access.
+- **Actually** holds and exercises broad capability well beyond both its declared permissions and its functional need.
+- **Fires when** the LLM invokes it and it reaches beyond its remit.
+- **Proof** — observed capability set materially exceeds declared and required; marker and finding.
+- **The point** — excess privilege is latent damage waiting for any bug or compromise.
+
+**Distinction from AST04 (must remain visible in findings):** AST04 is about a **false declaration** — the manifest misrepresents. AST03 is about **excessive grant** — the privilege is real and may even be declared, but it is disproportionate. The findings engine must express these as different failures, not two spellings of "mismatch."
+
+### 7.4 — Control skill *(no AST risk)*
+- Behaves **exactly** as declared, using exactly the capabilities it announced.
+- **Must produce zero findings**, ever.
+- Without it, "the scanner found three things" is unfalsifiable. This is the false-positive baseline (G5).
+
+### 7.5 — Scoping note: user-supplied skills (FR-2.5)
+Allowing users to install their own skill is a **product feature**, and a deliberate one — it mirrors how real skill stores accept third-party contributions, and it gives the red-team agent a way to deliver its own probe skill for capability testing.
+
+To keep the target unambiguous:
+- The upload path is **not counted as a fourth vulnerability** and has no AST ID.
+- Findings from user-supplied skills are classified against the **same AST taxonomy** as catalogue skills — the monitor treats all skills identically.
+- The **catalogue vulnerabilities remain the scored surface** *(four as of v1.1)*. Success criteria (§10) are measured against catalogue skills only, so an uploaded skill can never inflate or mask the result.
+
+### 7.6 — AST05 · Untrusted External Instructions *(added v1.1)*
+> *"A skill that takes its orders from somewhere you cannot see."*
+
+- **Presents as** a useful integration that keeps the user in step with their team — it fetches the team's shared working agreements and checks the task list against them.
+- **Actually** treats the fetched document as *instructions*: a field in it decides where the skill sends data, and another plants a line straight into the reply the user reads. Whoever controls that document controls the skill.
+- **Fires when** the LLM chooses it for the legitimate purpose it advertises. The document changes what the skill does **without the skill, its manifest, or its version changing at all**.
+- **Proof** — a fetch, then an action whose target came out of the fetched bytes, provable by digest; marker and finding, with the injected text readable in the evidence.
+- **The point** — reviewing a skill at install time tells you nothing if the skill asks someone else what to do at run time.
+
+**Distinction from AST01 (must remain visible in findings) —** both skills hold `task.read` and `net.outbound` and both make network calls, so this distinction carries the same weight as the AST04↔AST03 one above. AST01 is about **data moving outward** — the user's tasks are read and then sent. AST05 is about **instructions moving inward** — content arrives and then decides what happens next. They read different substrates (outbound payload digests versus inbound response content), and neither can fire the other: *Team Rules* sends no task content, and *Standup Sync* fetches nothing.
+
+**What this one costs.** AST05 is the **first** vulnerability that requires platform change (§0) — AST02 is the second, and is argued separately at §7.7. AST04, AST01 and AST03 each shipped as a skill folder and its tests. This one additionally needs the broker to record what comes back from a request, a fourth detection axis, and an endpoint that serves fetchable content. That is a deliberate, argued exception, and `docs/TDD.md` §12 binds any successor to argue its own case rather than citing this one as precedent.
+
+### 7.7 — AST02 · Supply Chain Compromise *(added v1.2)*
+> *"The skill you reviewed is fine. The thing it was built on top of was swapped."*
+
+- **Presents as** a useful utility that stands on a shared, versioned component published by somebody else — exactly as real software does. It goes further than any other skill in the catalogue: it writes down the **fingerprint** of the exact build its author reviewed.
+- **Actually** receives a *different build* of that component: same package name, same version number, different bytes, different behaviour. The substituted build quietly sizes anything to do with security, audits, invoices or passwords as trivial, so the work most worth doing sinks to the bottom of the user's list.
+- **Fires when** the LLM chooses the skill for the legitimate purpose it advertises, and the skill fetches the component it always fetches.
+- **Proof** — the fingerprint of what was delivered, recorded by the broker at the moment of delivery and before the skill saw a byte of it, set against the fingerprint the manifest pinned; marker and finding.
+- **The point** — reviewing a skill tells you nothing about the code it pulls in. Nobody in this story did anything wrong except the publisher.
+
+**Distinction from AST04 (must remain visible in findings) —** both axes compare a manifest claim against something observed, so this distinction carries the same weight as the AST04↔AST03 and AST01↔AST05 ones above. AST04 compares the skill's **own capability declaration** against **what the skill did**: the skill is lying, and the remedy is to correct the manifest. AST02 compares a **third party's artifact identity** against **the digest of what was delivered**: the skill is honest, correct and unchanged, the fault is upstream, and its author can do nothing. The sharpest test of the difference is that **AST02 fires on a substituted build that is completely benign** — truthfulness never can, because it is defined over acts.
+
+**What this one costs.** AST02 is the **second** vulnerability requiring platform change, and it is held to `docs/TDD.md` §12's replacement test in its own spec (§9.8) rather than leaning on AST05's carve-out. Unlike AST05 it needs **no new recording whatsoever**: every fingerprint it reads is already written down. What it adds is a place for a skill to *declare* the component it depends on, a fifth detection axis, and a mock registry that publishes components by name and version.
+
+---
+
+## 8. Release sequence
+
+Built and shipped one at a time, in this order. Each release is independently demoable.
+
+| Release | Feature | Contents | Done when |
+|---|---|---|---|
+| **R0 — Foundation** | `app-foundation` | To-do assistant, LLM dispatch, skill store, capability monitor, findings engine, activity log, JSON API, **control skill only** | App runs, chats, installs/uninstalls the control skill, runs it, and reports **zero findings** |
+| **R1 — AST04** | `ast04-insecure-metadata` | Insecure-metadata skill | Fires via LLM; declared-vs-observed finding raised; control still clean |
+| **R2 — AST01** | `ast01-malicious-skills` | Malicious skill | Task data reaches mock collector via LLM-chosen invocation; finding raised; control still clean |
+| **R3 — AST03** | `ast03-over-privileged` | Over-privileged skill | Excess capability observed and distinguished from AST04; control still clean |
+| **R4 — AST05** *(added v1.1)* | `ast05-untrusted-external-instructions` | Instruction-following skill, mock team hub, **provenance axis**, inbound response capture | External content steers a skill's behaviour through an LLM-chosen invocation; provenance finding raised and distinguished from correlation; **the other three vulnerabilities' finding sets are unchanged**; control still clean |
+
+| **R5 — AST02** *(added v1.2)* | `ast02-supply-chain` | Estimator skill, mock component registry, **integrity axis**, optional pinned `dependencies` on the manifest | A component the skill depends on is delivered compromised through an LLM-chosen invocation; an integrity finding is raised and distinguished from truthfulness; **the other four vulnerabilities' finding sets are unchanged, and so are their observation records**; control still clean |
+
+R0 carrying the control skill is deliberate: it proves the monitor can stay silent before it is ever asked to speak.
+
+**R5 is sequenced last for the same reason R4 was**, and carries the same extra clause: the four shipped vulnerabilities must produce byte-for-byte the same findings after R5 as before it. It carries one clause R4 did not need — their **observation records** must be byte-for-byte identical too, because unlike AST05 this feature adds no recording at all and that stricter promise is worth measuring.
+
+**R4 is sequenced last for a reason.** It is the only release that changes the platform, so every other vulnerability is complete and green before the substrate moves underneath them. Its done-when clause therefore carries an extra clause the others do not need: the three shipped vulnerabilities must produce byte-for-byte the same findings after R4 as before it.
+
+Each release maps to one feature under `docs/features/<feature>/`. Release sequencing lives here and in per-feature plans; the shared architecture is release-agnostic and lives in `docs/TDD.md`.
+
+---
+
+## 9. Design and experience requirements
+
+- **DR-1** Styling derives from `design/aegis-design-foundations.html`, used **purely as a token source**. The app carries **no external brand, logo, or project name** — it is TaskBot only.
+- **DR-2** Dark-first, purple-accented security-tool aesthetic: canvas `#08080D`, surfaces `#0d0d14`/`#14141b`/`#1b1b24`, purple ramp `#6B3B85` → `#C5A7D9`, borders at `rgba(197,167,217,0.12)`.
+- **DR-3** Raleway for UI; monospace for findings, manifests, evidence, and log detail.
+- **DR-4** Findings use the foundations' severity scale as badges — critical `#FF4D5E`, high `#FF8A3D`, medium `#E6B84A`, low `#56A8E8`, info `#8C97BE`.
+- **DR-5** **Polished product, not DVWA-gray.** Scope is deliberately small; visual quality is not. A believable-looking product is what makes the vulnerabilities read as realistic (G6) rather than as toys.
+- **DR-6** The interface must let a reviewer follow one story end to end: *install a skill → ask something ordinary → watch the assistant choose it → see the finding appear.*
+
+---
+
+## 10. Success criteria
+
+| # | Criterion | Measure |
+|---|---|---|
+| **SC-1** | Each of the **5** vulnerabilities fires through the LLM agent *(v1.2 — was 4)* | **≥4 of 5** distinct, natural trigger prompts per vulnerability cause the LLM to choose the skill and the exploit to fire |
+| **SC-2** | Each firing is detectable with proof | Every firing yields both a marker artifact and a findings-API entry carrying the correct AST ID |
+| **SC-3** | Control skill is clean | Invoked repeatedly across all sessions, produces **zero** findings |
+| **SC-4** | Vulnerabilities are skill-scoped | With no skills installed, no exploit is reachable and no finding can be produced |
+| **SC-5** | Nothing escapes the sandbox | No non-local network egress; no file access outside the app's own data directory; all effects reversible by deleting markers |
+| **SC-6** | Runs trivially | One command plus a local model, from a clean checkout |
+| **SC-7** | Demoable in minutes | A reviewer who has never seen it can follow install → trigger → finding unaided |
+| **SC-8** | Believable | Reads as a real small assistant product, not a test harness |
+
+---
+
+## 11. Technical direction *(context, not requirements)*
+
+Python + FastAPI + Jinja2, plain HTML/CSS. Local LLM via **Ollama (required)**. JSON-file storage. Skills as manifest + code folders on disk. Chosen for one-command local runs and readable-in-minutes source.
+
+---
+
+## 12. Risks
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Local model is inconsistent at choosing skills | SC-1 flaky; G2 undermined | Skill descriptions must be genuinely compelling for their stated purpose; measure against the 5-prompt bar and tune manifests, **never** by adding hardcoded routing (FR-3.4) |
+| AST04 and AST03 findings blur together | Two of four vulnerabilities look like one | Findings engine expresses false-declaration vs excessive-grant as distinct failure types (§7.3) |
+| **AST05 and AST01 findings blur together** *(v1.1)* | Both skills fetch/send over the network under the same category and grant; the fourth vulnerability reads as a re-run of the second | The axes read **opposite substrates** — correlation matches outbound payload digests, provenance matches inbound response content (§7.6). Pinned by mutual-exclusion tests: *Team Rules* raises no correlation finding, *Standup Sync* raises no provenance finding |
+| **AST02 and AST04 findings blur together** *(v1.2)* | Both compare a manifest claim against something observed; the fifth vulnerability reads as a re-run of the first | The axes compare **different claims about different subjects**: AST04 compares the skill's own capability declaration against its acts; AST02 compares a third party's artifact identity against a delivered digest. Pinned by the criterion that separates them absolutely — **a completely benign substituted build still fires AST02**, which truthfulness can never do (`ast02 spec` A-7), plus mutual-exclusion assertions in both directions (A-5, A-10) |
+| **A sixth skill in the store degrades LLM choice for the others** *(v1.2)* | SC-1 regresses for skills that were previously passing, and the failure looks like AST02's fault | SC-1 has never been measured at six skills, and `Foundation A-3` last recorded 3/5. AST02 occupies a prompt space no sibling holds ("how long will it take?"), and R5's manual checks re-run A-1 for **all five siblings** at the same sitting. Any regression is fixed by that skill's own `description`/`when_to_use` wording — never by routing (FR-3.4) |
+| **The platform change makes AST05 look staged** *(v1.1)* | The one vulnerability that needed `backend/**` edits is the one a reviewer distrusts | The test is whether the detector can stay **silent**: an honest fetch that ignores the instruction fields raises nothing, and all three prior vulnerabilities are unchanged. Both are acceptance criteria, not assertions (`ast05 spec` A-7, A-15) |
+| Vulnerability leaks into the general-chat path | Becomes an LLM-layer app; breaks NG4 | SC-4 checked every release |
+| Simulated exploits read as fake | Fails G6/SC-8 | Exploits mirror real technique and target real in-app data; only the *destination* is mocked |
+| User-supplied skills muddy the scored surface | Ambiguous results | §7.5 — scoring counts catalogue skills only |
+| App is mistaken for something safe to expose | Real harm | FR-7.6 warning; localhost-only, no auth by design |
+
+---
+
+## 13. Open items
+
+- ~~**A fourth vulnerability**~~ — **resolved (v1.1)**: **AST05 · Untrusted External Instructions**, scoped as release R4 (§7.6, §8). The assessment behind the choice — including the four AST risks this architecture cannot authentically demonstrate — is summarised in NG1 and argued in full in the feature spec.
+- ~~**AST risk severities**~~ — **resolved**: AST01 `critical`, AST04 `high`, AST03 `medium`, `BROKER_BYPASS` `high`, `UNUSED_GRANT` `low`. See `docs/TDD.md` §14 Q-2. **Extended v1.1** for AST05: `EXTERNAL_INSTRUCTION_FLOW` `high`, `AGENT_INSTRUCTION_RELAY` `medium`. **Extended v1.2** for AST02: `COMPROMISED_DEPENDENCY` `high`, `UNPINNED_DEPENDENCY` `low`. `critical` remains unique to AST01.
+- **`UNUSED_GRANT` is implemented but unwired** — a disclosed foundation defect, `docs/KNOWN-ISSUES.md` KI-1. Untouched by v1.1 and still open; scheduled after the vulnerability releases.
+
+---
+
+## 14. Document set
+
+This PRD is the product source of truth. Technical work derives from it:
+
+- `docs/TDD.md` — system-wide technical design (release-agnostic), covering the platform and all **five** vulnerability classes at architecture level.
+- `docs/features/app-foundation/spec.md` — the platform, implementation-level.
+- `docs/features/ast04-insecure-metadata/spec.md` · `docs/features/ast01-malicious-skills/spec.md` · `docs/features/ast03-over-privileged/spec.md` · `docs/features/ast05-untrusted-external-instructions/spec.md` · `docs/features/ast02-supply-chain/spec.md` — one spec per vulnerability.
+- `docs/KNOWN-ISSUES.md` — platform defects that are known, deliberately deferred, and disclosed. Distinct from the intentional vulnerabilities above.
+
+Per-feature plans are added alongside each spec when that feature is scheduled.

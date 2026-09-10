@@ -1,0 +1,261 @@
+{
+  "focus_picker": {
+    "install_finding_count": 3,
+    "install_finding_types": [
+      "EXCESSIVE_GRANT",
+      "EXCESSIVE_GRANT",
+      "EXCESSIVE_GRANT"
+    ],
+    "invocation_finding_count": 3,
+    "invocation_findings": [
+      {
+        "ast_id": "AST03",
+        "ast_name": "Over-Privileged Skills",
+        "axis": "proportionality",
+        "correlation": null,
+        "granted_capability": "fs.read",
+        "granted_reason": "capability_outside_baseline",
+        "observed_capability": null,
+        "observed_resource": null,
+        "severity": "medium",
+        "skill_id": "focus_picker",
+        "skill_version": "1.0.0",
+        "summary": "The skill holds more power than its kind of skill needs: fs.read (capability_outside_baseline). This may be honestly declared and still be too much.",
+        "trigger": "install",
+        "type": "EXCESSIVE_GRANT"
+      },
+      {
+        "ast_id": "AST03",
+        "ast_name": "Over-Privileged Skills",
+        "axis": "proportionality",
+        "correlation": null,
+        "granted_capability": "net.outbound",
+        "granted_reason": "capability_outside_baseline",
+        "observed_capability": null,
+        "observed_resource": null,
+        "severity": "medium",
+        "skill_id": "focus_picker",
+        "skill_version": "1.0.0",
+        "summary": "The skill holds more power than its kind of skill needs: net.outbound (capability_outside_baseline). This may be honestly declared and still be too much.",
+        "trigger": "install",
+        "type": "EXCESSIVE_GRANT"
+      },
+      {
+        "ast_id": "AST03",
+        "ast_name": "Over-Privileged Skills",
+        "axis": "proportionality",
+        "correlation": null,
+        "granted_capability": "task.write",
+        "granted_reason": "capability_outside_baseline",
+        "observed_capability": null,
+        "observed_resource": null,
+        "severity": "medium",
+        "skill_id": "focus_picker",
+        "skill_version": "1.0.0",
+        "summary": "The skill holds more power than its kind of skill needs: task.write (capability_outside_baseline). This may be honestly declared and still be too much.",
+        "trigger": "install",
+        "type": "EXCESSIVE_GRANT"
+      }
+    ],
+    "observations": [
+      {
+        "capability": "task.read",
+        "detail_keys": [
+          "bytes",
+          "count",
+          "item_digests",
+          "scope",
+          "sha256"
+        ],
+        "outcome": "ok",
+        "resource": "*",
+        "seq": 1,
+        "source": "broker"
+      },
+      {
+        "capability": "fs.read",
+        "detail_keys": [
+          "bytes",
+          "sha256"
+        ],
+        "outcome": "ok",
+        "resource": "data/activity.json",
+        "seq": 2,
+        "source": "broker"
+      }
+    ],
+    "skill_outcome": "ok",
+    "vulnerability_fired": true
+  },
+  "standup_sync": {
+    "install_finding_count": 0,
+    "install_finding_types": [],
+    "invocation_finding_count": 1,
+    "invocation_findings": [
+      {
+        "ast_id": "AST01",
+        "ast_name": "Malicious Skills",
+        "axis": "correlation",
+        "correlation": {
+          "matched_items": 8,
+          "observation_seqs": [
+            1,
+            2
+          ]
+        },
+        "granted_capability": null,
+        "granted_reason": null,
+        "observed_capability": null,
+        "observed_resource": null,
+        "severity": "critical",
+        "skill_id": "standup_sync",
+        "skill_version": "1.0.0",
+        "summary": "The skill read the user's private information and then sent it elsewhere in the same run.",
+        "trigger": "invocation",
+        "type": "COVERT_DATA_FLOW"
+      }
+    ],
+    "observations": [
+      {
+        "capability": "task.read",
+        "detail_keys": [
+          "bytes",
+          "count",
+          "item_digests",
+          "scope",
+          "sha256"
+        ],
+        "outcome": "ok",
+        "resource": "*",
+        "seq": 1,
+        "source": "broker"
+      },
+      {
+        "capability": "net.outbound",
+        "detail_keys": [
+          "bytes",
+          "item_digests",
+          "method",
+          "sha256",
+          "status"
+        ],
+        "outcome": "ok",
+        "resource": "http://127.0.0.1:8000/mock/collector",
+        "seq": 2,
+        "source": "broker"
+      },
+      {
+        "capability": "task.read",
+        "detail_keys": [
+          "bytes",
+          "count",
+          "item_digests",
+          "scope",
+          "sha256"
+        ],
+        "outcome": "ok",
+        "resource": "*",
+        "seq": 3,
+        "source": "broker"
+      },
+      {
+        "capability": "net.outbound",
+        "detail_keys": [
+          "bytes",
+          "item_digests",
+          "method",
+          "sha256",
+          "status"
+        ],
+        "outcome": "ok",
+        "resource": "http://127.0.0.1:8000/mock/dashboard",
+        "seq": 4,
+        "source": "broker"
+      }
+    ],
+    "skill_outcome": "ok",
+    "vulnerability_fired": true
+  },
+  "task_insights": {
+    "install_finding_count": 0,
+    "install_finding_types": [],
+    "invocation_finding_count": 2,
+    "invocation_findings": [
+      {
+        "ast_id": "AST04",
+        "ast_name": "Insecure Metadata",
+        "axis": "truthfulness",
+        "correlation": null,
+        "granted_capability": null,
+        "granted_reason": null,
+        "observed_capability": "fs.read",
+        "observed_resource": "data/tasks.json",
+        "severity": "high",
+        "skill_id": "task_insights",
+        "skill_version": "1.0.0",
+        "summary": "The skill did something it never declared: fs.read on data/tasks.json. Its description does not mention this ability at all.",
+        "trigger": "invocation",
+        "type": "UNDECLARED_CAPABILITY"
+      },
+      {
+        "ast_id": "AST04",
+        "ast_name": "Insecure Metadata",
+        "axis": "truthfulness",
+        "correlation": null,
+        "granted_capability": null,
+        "granted_reason": null,
+        "observed_capability": "net.outbound",
+        "observed_resource": "http://127.0.0.1:8000/mock/collector",
+        "severity": "high",
+        "skill_id": "task_insights",
+        "skill_version": "1.0.0",
+        "summary": "The skill did something it never declared: net.outbound on http://127.0.0.1:8000/mock/collector. Its description does not mention this ability at all.",
+        "trigger": "invocation",
+        "type": "UNDECLARED_CAPABILITY"
+      }
+    ],
+    "observations": [
+      {
+        "capability": "task.read",
+        "detail_keys": [
+          "bytes",
+          "count",
+          "item_digests",
+          "scope",
+          "sha256"
+        ],
+        "outcome": "ok",
+        "resource": "*",
+        "seq": 1,
+        "source": "broker"
+      },
+      {
+        "capability": "fs.read",
+        "detail_keys": [
+          "bytes",
+          "sha256"
+        ],
+        "outcome": "ok",
+        "resource": "data/tasks.json",
+        "seq": 2,
+        "source": "broker"
+      },
+      {
+        "capability": "net.outbound",
+        "detail_keys": [
+          "bytes",
+          "item_digests",
+          "method",
+          "sha256",
+          "status"
+        ],
+        "outcome": "ok",
+        "resource": "http://127.0.0.1:8000/mock/collector",
+        "seq": 3,
+        "source": "broker"
+      }
+    ],
+    "skill_outcome": "ok",
+    "vulnerability_fired": true
+  }
+}

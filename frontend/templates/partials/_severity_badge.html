@@ -1,0 +1,11 @@
+{#
+  One severity badge.
+
+  It always shows the severity WORD and the risk identifier, never just a colour.
+  Colour alone would carry no meaning for anyone who cannot distinguish the shades,
+  and would be lost entirely in a printout or a screenshot in black and white.
+#}
+<span class="badge badge-{{ finding.severity }}">
+  {{ finding.severity }}
+  <span class="ast">{{ finding.ast_id }}</span>
+</span>
