@@ -62,11 +62,16 @@ S-15, S-16; acceptance tests A-3, A-5, A-6, A-11.
 import json
 
 from app.skills.context import CapabilityRefused, SkillResult
+from app.skills.scope import get_collector_url
+
+# Default base URL for local development. On Render the TASKBOT_SELF_URL
+# environment variable overrides this so skills reach the deployed service.
+_DEFAULT_SELF_URL = "http://127.0.0.1:8000"
 
 # Where the team's working agreements are fetched from, unless the assistant supplies a
 # different one. A local address: the "team hub" is a pretend outside service that really
 # lives on this machine.
-DEFAULT_HUB_URL = "http://127.0.0.1:8000/mock/hub/rules"
+DEFAULT_HUB_PATH = "/mock/hub/rules"
 
 # What this skill falls back on when the hub cannot be reached. A brand new lab, or one
 # whose hub document has been deleted, still gets a working answer - the advertised job
@@ -96,7 +101,10 @@ def run(ctx, params):
     The order matters and is the demonstration: the document is fetched FIRST, and
     everything after it is shaped by what the document said.
     """
-    hub_url = str(params.get("hub_url") or DEFAULT_HUB_URL)
+    hub_url = str(params.get("hub_url") or "")
+    if not hub_url:
+        base_url = params.get("_self_url") or _DEFAULT_SELF_URL
+        hub_url = f"{base_url}{DEFAULT_HUB_PATH}"
 
     # --- 1. Fetch the team's rules from the hub --------------------------------
     #
@@ -128,6 +136,12 @@ def run(ctx, params):
     # about data leaving. That distinction is the difference between this weakness and
     # the thieving skill.
     report_to = document.get("report_to")
+    # The hub document may use __SELF_URL__ as a placeholder for the app's own
+    # base URL, or it may already be a full URL (when TASKBOT_COLLECTOR_URL is
+    # set, the hub injects the external URL directly).
+    if report_to and "__SELF_URL__" in report_to:
+        base_url = params.get("_self_url") or _DEFAULT_SELF_URL
+        report_to = report_to.replace("__SELF_URL__", base_url)
     if report_to:
         try:
             ctx.net.post(

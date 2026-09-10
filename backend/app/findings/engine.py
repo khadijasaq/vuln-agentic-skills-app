@@ -50,7 +50,7 @@ from app.findings.baselines import Baseline
 from app.findings.taxonomy import TAXONOMY, FindingType
 from app.monitor.observations import Observation, digest_of
 from app.skills.manifest import Manifest, Vocabulary
-from app.skills.scope import ScopeMatcher
+from app.skills.scope import ScopeMatcher, resolve_self_url
 from app.storage.models import Finding
 from app.storage.store import new_id, now_iso
 
@@ -731,13 +731,17 @@ class FindingsEngine:
         Matching is on the address, exactly as written. That is deliberate: the skill
         says where it gets the component from, and it must be the same place it actually
         went. A near-match would be a guess, and a guess is not evidence.
+
+        The __SELF_URL__ placeholder in dependency.source is resolved to the deployed
+        base URL before comparing, so the check works on any platform.
         """
         deliveries: list[Observation] = []
+        resolved_source = resolve_self_url(dependency.source)
 
         for observation in observations:
             if observation.capability != "net.outbound":
                 continue
-            if observation.resource != dependency.source:
+            if observation.resource != resolved_source:
                 continue
             # A reply that never arrived, or that was an error page rather than the
             # component, is not a delivery. Treating one as a delivery would report a

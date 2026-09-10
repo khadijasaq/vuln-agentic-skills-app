@@ -32,11 +32,15 @@ class ConfigError(Exception):
     """
 
 
-# The only network addresses we allow the app to listen on. Every one of these
-# means "this computer only" - a different machine on the network cannot reach them.
-# "127.0.0.1" and "::1" are the numeric names for "myself"; "localhost" is the
-# friendly word for the same thing.
+# The only network addresses we allow the app to listen on by default. Every one
+# of these means "this computer only" - a different machine on the network cannot
+# reach them. "127.0.0.1" and "::1" are the numeric names for "myself"; "localhost"
+# is the friendly word for the same thing.
+#
+# On Render (or other platforms) the app must bind to "0.0.0.0" so the platform's
+# reverse proxy can reach it. Setting TASKBOT_ALLOW_PUBLIC_BIND=true enables this.
 LOOPBACK_ADDRESSES = frozenset({"127.0.0.1", "::1", "localhost"})
+PUBLIC_BIND_ADDRESS = "0.0.0.0"
 
 
 # Where each part of the project lives, worked out from this file's own location.
@@ -94,6 +98,15 @@ class Settings:
     # so the app needs to know where they are.
     templates_dir: Path
     static_dir: Path
+
+    # --- self-referencing URL (for skills calling back to this app) ---
+    self_url: str
+
+    # --- external collector URL (for real data exfiltration demo on Render) ---
+    # When set, skills send stolen data to this URL instead of the local mock collector.
+    # Locally this is empty (data stays on your PC). On Render, set it to a public
+    # endpoint (ngrok, webhook.site, etc.) so data actually reaches your machine.
+    collector_url: str
 
     # --- behaviour dials ---
     history_turns: int
@@ -160,17 +173,38 @@ def load_settings() -> Settings:
     Raises ConfigError if anything is set to a value we cannot safely accept.
     """
     host = _read_text("TASKBOT_HOST", "127.0.0.1")
+    allow_public = _read_text("TASKBOT_ALLOW_PUBLIC_BIND", "").lower() in ("true", "1", "yes")
 
     # THE SAFETY CATCH. This app is intentionally vulnerable, so it must only ever
     # be reachable from the computer it is running on. "0.0.0.0" means "let anyone
     # on the network connect", which would expose a knowingly insecure app to other
     # machines. We refuse to start rather than allow that by accident.
+    #
+    # On Render (and similar platforms) the app MUST bind to 0.0.0.0 so the
+    # platform's reverse proxy can route traffic to it. Setting
+    # TASKBOT_ALLOW_PUBLIC_BIND=true explicitly opts into this, acknowledging
+    # the safety trade-off for deployment purposes.
     if host not in LOOPBACK_ADDRESSES:
-        raise ConfigError(
-            f"TASKBOT_HOST is set to {host!r}, but TaskBot is intentionally vulnerable "
-            f"and may only listen on this machine. Allowed values: "
-            f"{', '.join(sorted(LOOPBACK_ADDRESSES))}."
-        )
+        if not allow_public or host != PUBLIC_BIND_ADDRESS:
+            raise ConfigError(
+                f"TASKBOT_HOST is set to {host!r}, but TaskBot is intentionally vulnerable "
+                f"and may only listen on this machine. Allowed values: "
+                f"{', '.join(sorted(LOOPBACK_ADDRESSES))}. "
+                f"To bind to 0.0.0.0 for platform deployment, set "
+                f"TASKBOT_ALLOW_PUBLIC_BIND=true."
+            )
+
+    # The self-referencing URL is how skills call back to this app's mock services.
+    # Locally it is always http://127.0.0.1:<port>. On Render (or similar) it can
+    # be overridden via TASKBOT_SELF_URL so skills reach the deployed service.
+    port = _read_int("TASKBOT_PORT", 8000)
+    self_url = _read_text("TASKBOT_SELF_URL", "")
+    if not self_url:
+        self_url = f"http://127.0.0.1:{port}"
+
+    # External collector URL for real data exfiltration demo. When set, skills
+    # send stolen data to this URL instead of the local mock collector.
+    collector_url = _read_text("TASKBOT_COLLECTOR_URL", "")
 
     data_dir = Path(_read_text("TASKBOT_DATA_DIR", str(BACKEND_DEFAULTS["data"]))).resolve()
     skills_dir = Path(_read_text("TASKBOT_SKILLS_DIR", str(BACKEND_DEFAULTS["skills"]))).resolve()
@@ -187,7 +221,9 @@ def load_settings() -> Settings:
         groq_api_key=_read_text("GROQ_API_KEY", ""),
         groq_base_url=_read_text("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
         host=host,
-        port=_read_int("TASKBOT_PORT", 8000),
+        port=port,
+        self_url=self_url,
+        collector_url=collector_url,
         data_dir=data_dir,
         skills_dir=skills_dir,
         policy_dir=policy_dir,

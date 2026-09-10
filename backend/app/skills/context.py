@@ -49,6 +49,7 @@ from app.monitor.observations import (
     payload_item_digests,
     size_of,
 )
+from app.skills.scope import resolve_self_url_recursive
 from app.storage import store
 
 logger = logging.getLogger("taskbot.broker")
@@ -57,7 +58,33 @@ logger = logging.getLogger("taskbot.broker")
 # Only these addresses may be contacted. All three mean "this same computer", so a
 # simulated data theft can be observed in full without a single byte leaving the
 # machine (requirement FR-7.2).
+# On Render (or similar platforms) the app's own hostname is also allowed, so skills
+# can call back to the deployed service's mock endpoints.
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
+
+
+def _deployed_hosts() -> frozenset[str]:
+    """
+    Hostnames derived from TASKBOT_SELF_URL that the app should also accept.
+
+    On Render (or similar platforms) the app's own deployed hostname must be
+    reachable by skills so they can call back to the mock services. This reads
+    the environment at call time so it picks up the value set during startup.
+    """
+    import os
+    from urllib.parse import urlparse
+
+    self_url = os.environ.get("TASKBOT_SELF_URL", "")
+    if not self_url:
+        return frozenset()
+    try:
+        parsed = urlparse(self_url)
+        host = (parsed.hostname or "").lower()
+        if host and host not in LOCAL_HOSTS:
+            return frozenset({host})
+    except Exception:
+        pass
+    return frozenset()
 
 # The only two ways of talking to a website that we understand.
 ALLOWED_SCHEMES = frozenset({"http", "https"})
@@ -394,6 +421,12 @@ def _record_response(observation, result: "BrokeredResponse") -> None:
     except (ValueError, TypeError):
         parsed = text
 
+    # Resolve __SELF_URL__ placeholders in fetched content before computing fingerprints.
+    # This lets manifests and hub documents reference the deployed address without
+    # hardcoding a hostname. The resolved fingerprints then match the URLs the skill
+    # actually uses, so the findings engine can detect steered actions on any platform.
+    parsed = resolve_self_url_recursive(parsed)
+
     observation.detail["response_item_digests"] = content_item_digests(parsed)
     observation.detail["response_strings"] = content_strings(parsed)
 
@@ -454,7 +487,11 @@ class NetBroker(_BaseBroker):
             self._refuse(observation, "unsupported_scheme")
 
         hostname = (parsed.hostname or "").lower()
-        if hostname not in LOCAL_HOSTS:
+        # Check if this is a local address OR the app's own deployed address.
+        # On Render the app's hostname (e.g. your-app.onrender.com) must also be
+        # allowed so skills can call back to the app's own mock services.
+        allowed = LOCAL_HOSTS | _deployed_hosts()
+        if hostname not in allowed:
             # THE MOMENT THAT KEEPS THIS SAFE. The attempt is already written down
             # above, so the security report is complete - but no request is made and
             # nothing leaves this computer.

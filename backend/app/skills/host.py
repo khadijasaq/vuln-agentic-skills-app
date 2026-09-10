@@ -198,6 +198,13 @@ class SkillHost:
         if problem:
             return self._failure(invocation_id, skill_id, problem, started_at)
 
+        # Inject the app's self-referencing URL so skills can call back to the
+        # app's own mock services. This is infrastructure, not a user-supplied
+        # parameter — it bypasses schema validation because it is injected by
+        # the platform, not by the AI model.
+        import os
+        cleaned_params.setdefault("_self_url", os.environ.get("TASKBOT_SELF_URL", ""))
+
         # STEP 3: a fresh notebook for this run.
         notebook = ObservationLog(invocation_id)
         context = SkillContext(invocation_id, notebook)

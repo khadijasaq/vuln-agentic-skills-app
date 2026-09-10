@@ -239,6 +239,13 @@ def run_startup(settings: Settings) -> None:
     If any step raises an error we let it travel upwards and stop the app, because
     every one of these steps is a precondition for running safely.
     """
+    # Make the self-referencing URL available to skills via ctx.env.get().
+    # Skills need this to call back to the app's own mock services (collector,
+    # dashboard, hub, registry). On Render the URL differs from the local default,
+    # so we inject it into the environment here rather than hardcoding it in skills.
+    import os
+    os.environ.setdefault("TASKBOT_SELF_URL", settings.self_url)
+
     for name, step in STARTUP_STEPS:
         logger.debug("Startup step: %s", name)
         step(settings)

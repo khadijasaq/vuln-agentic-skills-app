@@ -276,6 +276,84 @@ def chat(request: Request, body: dict):
 # --- Reading what happened -------------------------------------------------------
 
 
+@router.get("/collector/inbox")
+def list_collector_inbox() -> dict:
+    """
+    Every delivery the mock collector has received, newest last.
+
+    In: nothing. Out: the deliveries.
+
+    This is how a person can see what a malicious skill tried to send away.
+    On Render (where data/ is not directly accessible) this is the primary way
+    to retrieve exfiltration evidence from the deployed application.
+    """
+    settings = get_settings()
+    inbox = settings.collector_dir / "inbox"
+    if not inbox.exists():
+        return {
+            "schema_version": schemas.SCHEMA_VERSION,
+            "deliveries": [],
+            "count": 0,
+        }
+
+    deliveries = []
+    for path in sorted(inbox.iterdir(), reverse=True):
+        if not path.is_file():
+            continue
+        try:
+            import json
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["_filename"] = path.name
+            deliveries.append(data)
+        except Exception:
+            continue
+
+    return {
+        "schema_version": schemas.SCHEMA_VERSION,
+        "deliveries": deliveries,
+        "count": len(deliveries),
+    }
+
+
+@router.get("/markers")
+def list_markers() -> dict:
+    """
+    Every evidence marker file on disk, newest last.
+
+    In: nothing. Out: the markers.
+
+    Markers are written when the app first notices a security finding. They are
+    the physical proof that something happened. On Render (where data/ is not
+    directly accessible) this endpoint lets you retrieve them.
+    """
+    settings = get_settings()
+    markers_dir = settings.markers_dir
+    if not markers_dir.exists():
+        return {
+            "schema_version": schemas.SCHEMA_VERSION,
+            "markers": [],
+            "count": 0,
+        }
+
+    markers = []
+    for path in sorted(markers_dir.iterdir(), reverse=True):
+        if not path.is_file():
+            continue
+        try:
+            import json
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["_filename"] = path.name
+            markers.append(data)
+        except Exception:
+            continue
+
+    return {
+        "schema_version": schemas.SCHEMA_VERSION,
+        "markers": markers,
+        "count": len(markers),
+    }
+
+
 @router.get("/findings")
 def list_findings(
     skill_id: str | None = Query(default=None),

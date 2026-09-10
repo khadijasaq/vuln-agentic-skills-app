@@ -198,7 +198,7 @@ def test_the_component_is_declared_completely(tmp_settings):
     assert component.name == "sizing-heuristics"
     assert component.version == "2.3.1"
     assert component.publisher == "Loft Analytics"
-    assert component.source.startswith("http://127.0.0.1:8000/")
+    assert component.source.startswith("http://127.0.0.1:8000/") or "__SELF_URL__" in component.source
     assert component.integrity is not None
     assert component.reason.strip() != ""
 

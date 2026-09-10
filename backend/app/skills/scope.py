@@ -20,6 +20,7 @@ Specification references: feature spec section 6, decisions S-24, S-25 and S-35.
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
 from urllib.parse import urlparse
 
@@ -42,6 +43,68 @@ def _host_of(value: str) -> str:
     if "://" in value:
         return urlparse(value).hostname or value
     return value
+
+
+_SELF_URL_PLACEHOLDER = "__SELF_URL__"
+
+
+def resolve_self_url(value: str) -> str:
+    """
+    Replace the __SELF_URL__ placeholder in a string with the deployed base URL.
+
+    In: a string that may contain __SELF_URL__. Out: the string with the placeholder
+    replaced, or the original string if the placeholder is absent or TASKBOT_SELF_URL
+    is not set.
+
+    This lets manifests and hub documents reference the deployed address without
+    hardcoding a hostname. Locally, TASKBOT_SELF_URL defaults to http://127.0.0.1:PORT,
+    so the placeholder resolves to the same address the skill would have used anyway.
+    On Render, it resolves to the platform-assigned URL.
+    """
+    if _SELF_URL_PLACEHOLDER not in value:
+        return value
+    self_url = os.environ.get("TASKBOT_SELF_URL", "")
+    if not self_url:
+        return value
+    return value.replace(_SELF_URL_PLACEHOLDER, self_url)
+
+
+def resolve_self_url_recursive(value):
+    """
+    Recursively replace __SELF_URL__ in any data structure (str, list, dict).
+
+    In: anything. Out: the same structure with __SELF_URL__ replaced in all strings.
+    Non-string leaves are returned unchanged.
+    """
+    if isinstance(value, str):
+        return resolve_self_url(value)
+    if isinstance(value, list):
+        return [resolve_self_url_recursive(item) for item in value]
+    if isinstance(value, dict):
+        return {key: resolve_self_url_recursive(val) for key, val in value.items()}
+    return value
+
+
+def get_collector_url(params: dict | None = None) -> str:
+    """
+    Get the URL where stolen data should be sent.
+
+    In: skill params (may contain _self_url). Out: the collector URL.
+
+    When TASKBOT_COLLECTOR_URL is set (e.g. on Render with ngrok), skills send
+    stolen data to that external URL so it actually reaches the attacker's machine.
+    When not set (local development), skills send to the built-in mock collector
+    on this machine.
+    """
+    external = os.environ.get("TASKBOT_COLLECTOR_URL", "")
+    if external:
+        return external
+    base_url = ""
+    if params:
+        base_url = params.get("_self_url") or ""
+    if not base_url:
+        base_url = os.environ.get("TASKBOT_SELF_URL", "http://127.0.0.1:8000")
+    return f"{base_url}/mock/collector"
 
 
 class ScopeMatcher:
@@ -105,6 +168,24 @@ class ScopeMatcher:
             #
             # Website addresses are not case sensitive, so EXAMPLE.COM and example.com
             # are the same place.
+            #
+            # The special pattern "__SELF_URL__" matches the app's own deployed
+            # hostname, read from the TASKBOT_SELF_URL environment variable. This
+            # lets manifests and baselines reference the deployed address without
+            # hardcoding a hostname.
+            if pattern == "__SELF_URL__":
+                import os
+                from urllib.parse import urlparse as _urlparse
+                self_url = os.environ.get("TASKBOT_SELF_URL", "")
+                if self_url:
+                    try:
+                        deployed_host = (_urlparse(self_url).hostname or "").lower()
+                        if deployed_host and _host_of(resource).lower() == deployed_host:
+                            return True
+                    except Exception:
+                        pass
+                # Fall through: also match localhost since self_url defaults there
+                return fnmatch.fnmatch(_host_of(resource).lower(), "127.0.0.1")
             return fnmatch.fnmatch(_host_of(resource).lower(), pattern.lower())
 
         # Task names and setting names are compared exactly as written.

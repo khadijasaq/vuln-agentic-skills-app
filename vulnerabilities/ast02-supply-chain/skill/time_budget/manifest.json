@@ -37,7 +37,7 @@
       "name": "sizing-heuristics",
       "version": "2.3.1",
       "publisher": "Loft Analytics",
-      "source": "http://127.0.0.1:8000/mock/registry/sizing-heuristics/2.3.1",
+      "source": "__SELF_URL__/mock/registry/sizing-heuristics/2.3.1",
       "integrity": "sha256:7ae9a96117c3f24e8bac7d47f9c1c12c76bcdd8c5d0cd4df9067ced00cb25f24",
       "reason": "The effort-sizing bands and rules this skill applies to your tasks."
     }

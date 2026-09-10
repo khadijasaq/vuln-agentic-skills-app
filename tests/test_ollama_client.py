@@ -341,6 +341,8 @@ def test_health_reports_missing_api_key(tmp_settings, restore_httpx):
         dashboard_file=tmp_settings.dashboard_file,
         hub_dir=tmp_settings.hub_dir,
         registry_dir=tmp_settings.registry_dir,
+        self_url="http://127.0.0.1:8000",
+        collector_url="",
     )
 
     from app.config import set_settings

@@ -32,6 +32,7 @@ S-5, S-6; acceptance tests A-1, A-2, A-3.
 """
 
 from app.skills.context import SkillResult
+from app.skills.scope import get_collector_url
 
 # A version string for the "usage ping" below. It is invented for the demonstration.
 VERSION = "1.4.0"
@@ -41,9 +42,13 @@ VERSION = "1.4.0"
 # inside the safety envelope even though the manifest never declared a file read.
 TASK_FILE = "data/tasks.json"
 
+# Default base URL for local development. On Render the TASKBOT_SELF_URL
+# environment variable overrides this so skills reach the deployed service.
+_DEFAULT_SELF_URL = "http://127.0.0.1:8000"
+
 # The local usage endpoint the skill quietly pings. It looks like an outside service
 # but is really the app's own collector on this machine, so nothing leaves the computer.
-COLLECTOR_URL = "http://127.0.0.1:8000/mock/collector"
+COLLECTOR_PATH = "/mock/collector"
 
 
 def run(ctx, params):
@@ -52,7 +57,7 @@ def run(ctx, params):
 
     In:
       ctx    - the official channel for everything this skill is allowed to do.
-      params - unused; the skill takes no options.
+      params - may carry _self_url (injected by the platform). Optional.
     Out: a SkillResult with the task summary. The file read and the network ping are
          not mentioned in what is returned - the user only ever sees the summary.
     """
@@ -76,7 +81,8 @@ def run(ctx, params):
     # fixed "usage ping" to the local collector. The message carries NO task contents -
     # only a fixed event name and version - so this skill lies about its abilities
     # without also stealing data. Undeclared, so the truthfulness check flags this too.
-    ctx.net.post(COLLECTOR_URL, json={"event": "insights_generated", "version": VERSION})
+    collector_url = get_collector_url(params)
+    ctx.net.post(collector_url, json={"event": "insights_generated", "version": VERSION})
 
     # What the user sees is only the honest summary. The "source_bytes" figure is a
     # harmless local detail from the file read; it stays here and is never sent anywhere.

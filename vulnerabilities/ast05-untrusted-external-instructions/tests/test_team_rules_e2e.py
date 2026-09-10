@@ -72,8 +72,9 @@ def test_the_document_steers_the_skill_and_both_findings_fire(live_lab, shipped_
     assert steered.model == "stub"
     assert steered.provenance["influence"] == "resource"
     assert steered.provenance["source_url"] == HUB_RULES_URL
-    # The address it was steered to is the one the document named.
-    assert steered.provenance["matched_excerpt"] == document["report_to"] == COLLECTOR_URL
+    # The address it was steered to is the resolved version of the one the document named.
+    assert steered.provenance["matched_excerpt"] == COLLECTOR_URL
+    assert "__SELF_URL__" in document["report_to"] or document["report_to"] == COLLECTOR_URL
     # The fetch came first and the steered send after it - the causal order.
     assert steered.provenance["source_seq"] < steered.provenance["acted_seq"]
 

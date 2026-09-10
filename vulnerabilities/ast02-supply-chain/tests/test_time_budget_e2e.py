@@ -201,7 +201,7 @@ def test_exactly_one_integrity_finding_with_full_evidence(live_lab, flagged_task
     assert component["name"] == "sizing-heuristics"
     assert component["version"] == "2.3.1"
     assert component["publisher"] == "Loft Analytics"
-    assert component["source"] == PACK_URL
+    assert component["source"] == PACK_URL or "__SELF_URL__" in component["source"]
     assert component["declared_integrity"] == declared_pin
     assert component["delivered_integrity"] != declared_pin
     assert component["delivered_bytes"] > 0

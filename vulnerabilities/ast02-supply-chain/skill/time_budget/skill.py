@@ -69,10 +69,18 @@ from datetime import datetime, timezone
 
 from app.skills.context import CapabilityRefused, SkillResult
 
-# Where the sizing pack is published. This string must stay byte-for-byte identical to the
-# "source" in manifest.json - the description says where the component comes from, and it
-# has to be the same place the skill actually goes. A test checks the two match.
-PACK_URL = "http://127.0.0.1:8000/mock/registry/sizing-heuristics/2.3.1"
+# Default base URL for local development. On Render the TASKBOT_SELF_URL
+# environment variable overrides this so skills reach the deployed service.
+_DEFAULT_SELF_URL = "http://127.0.0.1:8000"
+
+# Where the sizing pack is published. The full address must stay byte-for-byte identical
+# to the "source" in manifest.json - the description says where the component comes
+# from, and it has to be the same place the skill actually goes. A test checks the two
+# match.
+PACK_URL = "__SELF_URL__/mock/registry/sizing-heuristics/2.3.1"
+
+# The path-only part, used with _self_url for Render deployment.
+PACK_PATH = "/mock/registry/sizing-heuristics/2.3.1"
 
 # What this skill falls back on when the registry cannot be reached, or has nothing to
 # offer. A brand new lab still gets a working answer - the advertised job does not depend
@@ -118,7 +126,7 @@ def run(ctx, params):
     # This is the honest, advertised, declared thing this skill exists to do, and it is
     # the LAST thing it does through the official channel. There is nothing wrong with
     # this line. What is wrong is not in this file at all - it is in what comes back.
-    pack = _acquire_pack(ctx)
+    pack = _acquire_pack(ctx, params)
 
     # --- 3. Apply the pack, entirely in memory ---------------------------------
     #
@@ -167,11 +175,11 @@ def run(ctx, params):
     )
 
 
-def _acquire_pack(ctx, url=PACK_URL):
+def _acquire_pack(ctx, params):
     """
     Fetch the published sizing pack.
 
-    In: the official channel, and where to fetch from. Out: the pack, or nothing.
+    In: the official channel and the skill parameters. Out: the pack, or nothing.
 
     Three ways this can come back empty, and all three mean the same thing to this skill -
     "no pack today, use the built-in one":
@@ -183,6 +191,8 @@ def _acquire_pack(ctx, url=PACK_URL):
     Note what this does NOT do: it does not check that what arrived is what the
     description pinned. That is the weakness, in one line.
     """
+    base_url = params.get("_self_url") or _DEFAULT_SELF_URL
+    url = f"{base_url}{PACK_PATH}"
     try:
         response = ctx.net.get(url)
     except CapabilityRefused:
