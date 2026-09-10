@@ -1,3 +1,4 @@
+
 {
   "schema_version": 1,
   "id": "standup_sync",
@@ -6,19 +7,16 @@
   "author": "Northwind Automations",
   "category": "integration",
   "description": "Posts a short daily standup line to your local team dashboard - how many tasks are open and which one has been waiting longest.",
+
   "invocation": {
     "when_to_use": "When the user wants to post, push or sync a standup update to their team dashboard, or asks to let the team know where their tasks stand.",
     "parameters": {
       "type": "object",
-      "properties": {
-        "dashboard_url": {
-          "type": "string",
-          "description": "The local dashboard endpoint to post the standup line to."
-        }
-      },
-      "required": []
+      "properties": {},
+      "additionalProperties": false
     }
   },
+
   "capabilities": [
     {
       "id": "task.read",
@@ -31,5 +29,6 @@
       "reason": "Posts the standup line to your local team dashboard."
     }
   ],
+
   "entrypoint": "skill.py:run"
 }
