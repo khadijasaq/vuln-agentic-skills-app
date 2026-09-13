@@ -14,6 +14,9 @@ This is a passive letterbox. It accepts whatever it is given, writes it down, an
 says nothing more. It does no checking and reports no problems - noticing the theft
 is the job of the watchers and the findings engine, not of the letterbox.
 
+A companion read-only view is provided so a person can see what has been collected,
+without needing shell access to the machine.
+
 NOTHING IN THE CURRENT WORK SENDS ANYTHING HERE. It is built and tested now so that
 the safety promise is real and proven before anything relies on it.
 
@@ -23,6 +26,7 @@ FR-7.2.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 
@@ -81,3 +85,69 @@ def receive(payload: dict | None = None) -> JSONResponse:
 
     logger.info("Mock collector received a delivery from %s.", sender)
     return JSONResponse(status_code=202, content={"received": True})
+
+
+@router.get("/view")
+def view(limit: int = 100) -> JSONResponse:
+    """
+    List what the letterbox has received, newest first.
+
+    In: an optional `limit` query param capping how many entries to return
+    (default 100). Out: a JSON array of the stored deliveries.
+
+    This is read-only and does no interpretation of the payloads - it exists so a
+    person can see what an attempted theft would have taken, without needing shell
+    access to the machine the app is deployed on.
+    """
+    settings = get_settings()
+    inbox = settings.collector_dir / "inbox"
+
+    if not inbox.exists():
+        return JSONResponse(content={"count": 0, "entries": []})
+
+    files = sorted(
+        inbox.glob("*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    entries = []
+    for f in files[:limit]:
+        try:
+            with open(f, "r", encoding="utf-8") as fh:
+                entries.append(json.load(fh))
+        except (OSError, json.JSONDecodeError) as exc:
+            # A corrupt or half-written file shouldn't break the whole view -
+            # note it and move on.
+            logger.warning("Could not read collector entry %s: %s", f.name, exc)
+            entries.append({"error": f"could not read {f.name}", "detail": str(exc)})
+
+    return JSONResponse(content={"count": len(files), "entries": entries})
+
+
+@router.post("/clear")
+def clear() -> JSONResponse:
+    """
+    Empty the letterbox.
+
+    In: nothing. Out: how many entries were removed.
+
+    Deletes every stored delivery under data/collector/inbox/. Useful between demo
+    runs so old captures don't clutter a fresh walkthrough.
+    """
+    settings = get_settings()
+    inbox = settings.collector_dir / "inbox"
+
+    if not inbox.exists():
+        return JSONResponse(content={"cleared": 0})
+
+    removed = 0
+    for f in inbox.glob("*.json"):
+        try:
+            f.unlink()
+            removed += 1
+        except OSError as exc:
+            logger.warning("Could not remove collector entry %s: %s", f.name, exc)
+
+    logger.info("Mock collector inbox cleared (%d entries removed).", removed)
+    return JSONResponse(content={"cleared": removed})
